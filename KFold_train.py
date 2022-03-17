@@ -32,7 +32,7 @@ def gradCamImg(model, logPath):
     # img = cv2.imread(image_path)
     # img = cv2.resize(img, (640, 640))
 
-    torch.save(model.state_dict(), "save.pt")
+    # torch.save(model.state_dict(), "save.pt")
     
     rgb_img, cam_image, cam_mask, cam_gb, gb = Grad_CAM.get_cam(model=model, image_path=image_path)
 
@@ -213,6 +213,8 @@ def test_model(model, test_loader):
 if __name__ == '__main__':
     ISKFOLD = True
     KFOLD_N = 82
+    SAVEPTH = False
+    SAVEIDX = True
     WANDBRUN = False
     SEED = 42
 
@@ -264,10 +266,11 @@ if __name__ == '__main__':
                 wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt+1)))
             Kfold_cnt += 1
 
-            json_dict = {'Kfold_cnt' : Kfold_cnt, 'val_idx': val_idx.tolist()}
-            json_file = open(logPath + '//'+ 'kfold_idx.json', "a")
-            json.dump(json_dict, json_file, indent=4)
-            json_file.close()
+            if SAVEIDX:
+                json_dict = {'Kfold_cnt' : Kfold_cnt, 'val_idx': val_idx.tolist()}
+                json_file = open(logPath + '//'+ 'kfold_idx.json', "a")
+                json.dump(json_dict, json_file, indent=4)
+                json_file.close()
 
 
             # if not os.path.isdir(KFoldPath):
@@ -303,8 +306,9 @@ if __name__ == '__main__':
             print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
             print("===================================================================================================")
             
-            saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
-            torch.save(model.state_dict(), saveModelpath)
+            if SAVEPTH:
+                saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
+                torch.save(model.state_dict(), saveModelpath)
 
         # Kfold 結束交叉驗證
         Accuracy, Specificity, Sensitivity = confusion(total_true, total_pred, logPath)
