@@ -3,3 +3,4 @@
 *.pyc
 *.ckpt
 *.onnx
+*.pth
