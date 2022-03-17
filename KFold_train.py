@@ -19,7 +19,7 @@ from torchvision import transforms
 
 from model.patch_convmix_convnext import PatchConvmixConvnext
 from model.focal_loss import FocalLoss
-
+import json
 
 import wandb
 import time
@@ -164,8 +164,8 @@ def fit_model(model, train_loader, val_loader):
                 
             roc_auc = compute_auc(y_true, y_pred_score)
 
-        # if roc_auc > 0:
-        roc_auc = max(roc_auc.values())
+        if roc_auc != -1:
+            roc_auc = max(roc_auc.values())
 
         if WANDBRUN:
             wb_run.log({ 
@@ -212,11 +212,11 @@ def test_model(model, test_loader):
 
 if __name__ == '__main__':
     ISKFOLD = True
-    KFOLD_N = 10
-    WANDBRUN = True
+    KFOLD_N = 82
+    WANDBRUN = False
     SEED = 42
 
-    EPOCH = 20
+    EPOCH = 1
     BATCHSIZE = 16
     LR = 0.0001
 
@@ -254,11 +254,21 @@ if __name__ == '__main__':
         total_pred_score = []
         totlal_acc = 0
 
-        for train_idx, val_idx in kf.split(dataset):
-            # if WANDBRUN:
-            wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt+1)))
+        # json_dict = {'Kfold_cnt' :[], 'train_idx': [], 'val_idx': []}
+        # json_file = open(logPath + '//'+ 'kfold_idx.json', "w")
+        # json.dump(json_dict, json_file, indent=4)
+        # json_file.close()
 
+        for train_idx, val_idx in kf.split(dataset):
+            if WANDBRUN:
+                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt+1)))
             Kfold_cnt += 1
+
+            json_dict = {'Kfold_cnt' : Kfold_cnt, 'val_idx': val_idx.tolist()}
+            json_file = open(logPath + '//'+ 'kfold_idx.json', "a")
+            json.dump(json_dict, json_file, indent=4)
+            json_file.close()
+
 
             # if not os.path.isdir(KFoldPath):
             #     os.mkdir(KFoldPath)
@@ -277,8 +287,8 @@ if __name__ == '__main__':
             total_true += kfold_true
             total_pred += kfold_pred
             total_pred_score += kfold_pred_score
-            # if roc_auc > 0:
-            roc_auc = max(roc_auc.values())
+            if roc_auc != -1:
+                roc_auc = max(roc_auc.values())
 
             if WANDBRUN:
                 wb_run.log({
@@ -292,15 +302,19 @@ if __name__ == '__main__':
             print("===================================================================================================")
             print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
             print("===================================================================================================")
-        
+            
+            saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
+            torch.save(model.state_dict(), saveModelpath)
+
+        # Kfold 結束交叉驗證
         Accuracy, Specificity, Sensitivity = confusion(total_true, total_pred, logPath)
         roc_auc = compute_auc(total_true, total_pred_score, logPath)
         print("===================================================================================================")
         print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
         print("Total AUC: ", roc_auc)
         print("===================================================================================================")
-
-        roc_auc = max(roc_auc.values())
+        if roc_auc != -1:
+            roc_auc = max(roc_auc.values())
         if WANDBRUN:
             wb_run.log({
                         "KFold Accuracy" : Accuracy,
@@ -312,40 +326,4 @@ if __name__ == '__main__':
 
     if WANDBRUN:
         wb_run.finish()
-    #     acc_array.append(accuracy)
-
-    #     # print("Accuracy :", accuracy)
-    #     # print("==============================================")
-
-        
-    #     print('KFold-{} : Accuracy = {}'.format(cnt, accuracy))
-    #     print('================================')
-    #     if WANDBRUN:
-    #         wandb.log({"Accuracy": accuracy})
-    #         wb_run.finish()
-    # else:
-    #     train_dataset = ImageFolder(DATAPATH + r'\train', transform)
-    #     val_dataset = ImageFolder(DATAPATH + r'\val', transform)
-    #     test_dataset = ImageFolder(DATAPATH + r'\test', transform)
-
-    #     train_loader = DataLoader(train_dataset, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
-    #     val_loader = DataLoader(val_dataset, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
-    #     test_loader = DataLoader(test_dataset, shuffle = True)
-
-    #     fit_model(model, train_loader, val_loader, logPath)
-    #     accuracy = FinalTest(model, test_loader, logPath)
-        
-#%%
-# wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(2)))
-# wb_run.finish()
-
-
-#%%
-# from PIL import Image
-# for idx in test_idx:
-#     to_PIL = transforms.ToPILImage()
-#     img = dataset.__getitem__(idx)[0]
-#     img = to_PIL(img)
-#     img.show()
-#     print(idx, dataset.__getitem__(idx)[1])
 
