@@ -21,6 +21,9 @@ from model.patch_convmix_convnext import PatchConvmixConvnext
 from model.focal_loss import FocalLoss
 import json
 
+import pandas as pd
+import seaborn as sns
+
 import wandb
 import time
 
@@ -55,7 +58,7 @@ def gradCamImg(model, logPath):
     plt.savefig(logPath+"//"+"gradCam_"+str(time.strftime("%H%M%S", time.localtime()))+".jpg", bbox_inches='tight')
     plt.close('all')
 
-def confusion(y_true, y_pred, logPath=None):
+def confusion(y_true, y_pred, calsses, logPath=None):
     confmat = confusion_matrix(y_true, y_pred, labels=[0, 1])
     fig, ax = plt.subplots(figsize=(2.5, 2.5))
 
@@ -80,6 +83,10 @@ def confusion(y_true, y_pred, logPath=None):
         Sensitivity = TP / (TP + FN)
     
     if logPath:
+        cf_matrix = confusion_matrix(y_true, y_pred)
+        df_cm = pd.DataFrame(cf_matrix, calsses, calsses)
+        plt.figure(figsize = (9,6))
+        sns.heatmap(df_cm, annot=True, fmt="d", cmap='BuGn')
         plt.xlabel('Predict', fontsize=10)        
         plt.ylabel('True', fontsize=10)
         
@@ -90,9 +97,8 @@ def confusion(y_true, y_pred, logPath=None):
 
     return Accuracy, Specificity, Sensitivity
 
-def compute_auc(y_true, y_score, logPath=None):
-    classes = ['Ischemia', 'Infect']
-    colors = cycle(['aqua', 'darkorange'])
+def compute_auc(y_true, y_score, classes, logPath=None):
+    colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
 
     fpr, tpr, roc_auc = dict(), dict(), dict()
     y_label = np.eye(len(classes))[y_true]
@@ -127,9 +133,10 @@ def compute_auc(y_true, y_score, logPath=None):
 
     return roc_auc
 
-def fit_model(model, train_loader, val_loader):
+def fit_model(model, train_loader, val_loader, classes):
     optimizer = torch.optim.Adam(model.parameters(), lr = LR)
-    loss_func = FocalLoss(class_num=2, alpha = torch.tensor([0.5, 0.5]).cuda(), gamma = 4)
+    loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.3, 0.3, 0.3]).to(device), gamma = 4)
+    # loss_func = FocalLoss(class_num=3, alpha = None, gamma = 4)
 
     for epoch in range(EPOCH):
         model.train()
@@ -162,7 +169,7 @@ def fit_model(model, train_loader, val_loader):
                 y_pred_score += pred.tolist()
                 y_true += y_.tolist()
                 
-            roc_auc = compute_auc(y_true, y_pred_score)
+            roc_auc = compute_auc(y_true, y_pred_score, classes)
 
         if roc_auc != -1:
             roc_auc = max(roc_auc.values())
@@ -181,7 +188,7 @@ def fit_model(model, train_loader, val_loader):
         # torch.save(model.state_dict(), "last.pth")
     return training_loss, val_loss
 
-def test_model(model, test_loader):
+def test_model(model, test_loader, classes):
     model.eval()
     correct = 0
     y_true = []
@@ -205,24 +212,26 @@ def test_model(model, test_loader):
             y_pred += pred.tolist()
             
         
-        Accuracy, Specificity, Sensitivity = confusion(y_true, y_pred)
-        roc_auc = compute_auc(y_true, y_pred_score)
+        Accuracy, Specificity, Sensitivity = confusion(y_true, y_pred, classes)
+        roc_auc = compute_auc(y_true, y_pred_score, classes)
 
         return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score
 
 if __name__ == '__main__':
     ISKFOLD = True
-    KFOLD_N = 82
+    KFOLD_N = 3
     SAVEPTH = False
     SAVEIDX = True
-    WANDBRUN = False
+    WANDBRUN = True
     SEED = 42
+    
+    CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
 
-    EPOCH = 1
+    EPOCH = 100
     BATCHSIZE = 16
     LR = 0.0001
 
-    DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_kfold'
+    DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
 
     if SEED:
         '''設定隨機種子碼'''
@@ -238,7 +247,7 @@ if __name__ == '__main__':
 
     
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    model = PatchConvmixConvnext().to(device)
+    model = PatchConvmixConvnext(dim = 768, depth = 3, kernel_size = 7, patch_size = 16, n_classes = 3).to(device)
     # if WANDBRUN:
     #     wandb.watch(model)
 
@@ -263,7 +272,7 @@ if __name__ == '__main__':
 
         for train_idx, val_idx in kf.split(dataset):
             if WANDBRUN:
-                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt+1)))
+                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_class_3", name=str("kfold_N="+str(Kfold_cnt+1)))
             Kfold_cnt += 1
 
             if SAVEIDX:
@@ -283,9 +292,9 @@ if __name__ == '__main__':
             train_loader = DataLoader(train, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
             val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
             
-            fit_model(model, train_loader, val_loader)
+            fit_model(model, train_loader, val_loader, CLASSNANE)
 
-            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred,  kfold_pred_score = test_model(model, val_loader)
+            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred,  kfold_pred_score = test_model(model, val_loader, CLASSNANE)
             totlal_acc += Accuracy
             total_true += kfold_true
             total_pred += kfold_pred
@@ -311,8 +320,8 @@ if __name__ == '__main__':
                 torch.save(model.state_dict(), saveModelpath)
 
         # Kfold 結束交叉驗證
-        Accuracy, Specificity, Sensitivity = confusion(total_true, total_pred, logPath)
-        roc_auc = compute_auc(total_true, total_pred_score, logPath)
+        Accuracy, Specificity, Sensitivity = confusion(total_true, total_pred, CLASSNANE, logPath)
+        roc_auc = compute_auc(total_true, total_pred_score, CLASSNANE, logPath)
         print("===================================================================================================")
         print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
         print("Total AUC: ", roc_auc)
