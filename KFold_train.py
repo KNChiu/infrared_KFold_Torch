@@ -3,11 +3,12 @@ from functools import total_ordering
 import os
 import cv2
 import random
+import io
 
 import numpy as np
 from PIL import Image
 from sklearn.model_selection import KFold
-from sklearn.metrics import confusion_matrix ,roc_curve, auc
+from sklearn.metrics import confusion_matrix ,roc_curve, auc, accuracy_score
 
 import matplotlib.pyplot as plt 
 from itertools import cycle
@@ -58,32 +59,51 @@ def gradCamImg(model, logPath):
     plt.savefig(logPath+"//"+"gradCam_"+str(time.strftime("%H%M%S", time.localtime()))+".jpg", bbox_inches='tight')
     plt.close('all')
 
+def get_img_from_fig(self, fig, dpi=300):                       # plt 轉為 numpy
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi)
+    buf.seek(0)
+    img_arr = np.frombuffer(buf.getvalue(), dtype=np.uint8)
+    buf.close()
+    img = cv2.imdecode(img_arr, 1)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    return img
+
 def confusion(y_true, y_pred, calsses, logPath=None):
-    confmat = confusion_matrix(y_true, y_pred, labels=[0, 1])
-    fig, ax = plt.subplots(figsize=(2.5, 2.5))
+    # confmat = confusion_matrix(y_true, y_pred, labels=[0, 1, 2])
+    # fig, ax = plt.subplots(figsize=(2.5, 2.5))
 
-    ax.matshow(confmat, cmap=plt.cm.Blues, alpha=0.3)
-    for i in range(confmat.shape[0]):
-        for j in range(confmat.shape[1]):
-            ax.text(x=j, y=i, s=confmat[i,j], va='center', ha='center', fontsize=10)
+    # ax.matshow(confmat, cmap=plt.cm.Blues, alpha=0.3)
+    # for i in range(confmat.shape[0]):
+    #     for j in range(confmat.shape[1]):
+    #         ax.text(x=j, y=i, s=confmat[i,j], va='center', ha='center', fontsize=10)
+    # print(y_true)
+    # print(y_pred)
+    # print(confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).ravel())
+    # TN, FP, FN, TP = confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).ravel()
+    # Accuracy = (TP+TN)/(TP+FP+FN+TN)
+    # # precision = TP / (TP + FP)
+    # # recall = TP / (TP + FN)
 
-    TN, FP, FN, TP = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
-    Accuracy = (TP+TN)/(TP+FP+FN+TN)
-    # precision = TP / (TP + FP)
-    # recall = TP / (TP + FN)
+    # if (TN + FP) == 0:
+    #     Specificity = 0.0
+    # else:
+    #     Specificity = TN / (TN + FP)
 
-    if (TN + FP) == 0:
-        Specificity = 0.0
-    else:
-        Specificity = TN / (TN + FP)
+    # if (TP + FN) == 0:
+    #     Sensitivity = 0.0
+    # else:
+    #     Sensitivity = TP / (TP + FN)
 
-    if (TP + FN) == 0:
-        Sensitivity = 0.0
-    else:
-        Sensitivity = TP / (TP + FN)
-    
+
+
+    Accuracy = accuracy_score(y_true, y_pred)
+    Specificity = 0.0
+    Sensitivity = 0.0
+
     if logPath:
-        cf_matrix = confusion_matrix(y_true, y_pred)
+        cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1, 2])
         df_cm = pd.DataFrame(cf_matrix, calsses, calsses)
         plt.figure(figsize = (9,6))
         sns.heatmap(df_cm, annot=True, fmt="d", cmap='BuGn')
@@ -91,6 +111,9 @@ def confusion(y_true, y_pred, calsses, logPath=None):
         plt.ylabel('True', fontsize=10)
         
         plt.title('Accuracy : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
+        # plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+        # wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
+
         plt.savefig(logPath + "//" + "confusion.jpg", bbox_inches='tight')
         # plt.close('all')
         plt.close()
@@ -135,7 +158,7 @@ def compute_auc(y_true, y_score, classes, logPath=None):
 
 def fit_model(model, train_loader, val_loader, classes):
     optimizer = torch.optim.Adam(model.parameters(), lr = LR)
-    loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.3, 0.3, 0.3]).to(device), gamma = 4)
+    loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
     # loss_func = FocalLoss(class_num=3, alpha = None, gamma = 4)
 
     for epoch in range(EPOCH):
@@ -219,7 +242,7 @@ def test_model(model, test_loader, classes):
 
 if __name__ == '__main__':
     ISKFOLD = True
-    KFOLD_N = 3
+    KFOLD_N = 83
     SAVEPTH = False
     SAVEIDX = True
     WANDBRUN = True
@@ -227,7 +250,7 @@ if __name__ == '__main__':
     
     CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
 
-    EPOCH = 100
+    EPOCH = 40
     BATCHSIZE = 16
     LR = 0.0001
 
