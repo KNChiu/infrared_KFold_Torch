@@ -59,7 +59,7 @@ def gradCamImg(model, logPath):
     plt.savefig(logPath+"//"+"gradCam_"+str(time.strftime("%H%M%S", time.localtime()))+".jpg", bbox_inches='tight')
     plt.close('all')
 
-def get_img_from_fig(self, fig, dpi=300):                       # plt 轉為 numpy
+def get_img_from_fig(fig, dpi=100):                       # plt 轉為 numpy
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi)
     buf.seek(0)
@@ -111,8 +111,8 @@ def confusion(y_true, y_pred, calsses, logPath=None):
         plt.ylabel('True', fontsize=10)
         
         plt.title('Accuracy : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
-        # plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
-        # wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
+        plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+        wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
 
         plt.savefig(logPath + "//" + "confusion.jpg", bbox_inches='tight')
         # plt.close('all')
@@ -149,6 +149,8 @@ def compute_auc(y_true, y_score, classes, logPath=None):
             plt.ylabel('True Positive Rate')
             plt.title('multi-calss ROC')
             plt.legend(loc="lower right")
+            plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+            wb_run.log({"compute_auc": [wandb.Image(plot_img_np)]})
             plt.savefig(logPath + "//" + "compute_auc.jpg", bbox_inches='tight')
             plt.close()
     else:
@@ -158,8 +160,8 @@ def compute_auc(y_true, y_score, classes, logPath=None):
 
 def fit_model(model, train_loader, val_loader, classes):
     optimizer = torch.optim.Adam(model.parameters(), lr = LR)
-    loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
-    # loss_func = FocalLoss(class_num=3, alpha = None, gamma = 4)
+    # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
+    loss_func = FocalLoss(class_num=3, alpha = None, gamma = 4)
 
     for epoch in range(EPOCH):
         model.train()
@@ -222,8 +224,10 @@ def test_model(model, test_loader, classes):
         for idx, (x, y) in enumerate(test_loader):
             pred = model(x.to(device))
 
-            if type(pred) == tuple:
-                pred = pred[0]
+            pred, gap = pred
+
+            # if type(pred) == tuple:
+            #     pred = pred[0]
 
             y_pred_score += pred.tolist()
 
@@ -238,11 +242,10 @@ def test_model(model, test_loader, classes):
         Accuracy, Specificity, Sensitivity = confusion(y_true, y_pred, classes)
         roc_auc = compute_auc(y_true, y_pred_score, classes)
 
-        return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score
+        return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score, gap
 
 if __name__ == '__main__':
     ISKFOLD = True
-    KFOLD_N = 83
     SAVEPTH = False
     SAVEIDX = True
     WANDBRUN = True
@@ -250,11 +253,13 @@ if __name__ == '__main__':
     
     CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
 
+    KFOLD_N = 83
     EPOCH = 40
     BATCHSIZE = 16
     LR = 0.0001
 
     DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
+    # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
 
     if SEED:
         '''設定隨機種子碼'''
@@ -295,7 +300,7 @@ if __name__ == '__main__':
 
         for train_idx, val_idx in kf.split(dataset):
             if WANDBRUN:
-                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_class_3", name=str("kfold_N="+str(Kfold_cnt+1)))
+                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_class_4", name=str("kfold_N="+str(Kfold_cnt+1)))
             Kfold_cnt += 1
 
             if SAVEIDX:
@@ -317,7 +322,21 @@ if __name__ == '__main__':
             
             fit_model(model, train_loader, val_loader, CLASSNANE)
 
-            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred,  kfold_pred_score = test_model(model, val_loader, CLASSNANE)
+            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap = test_model(model, val_loader, CLASSNANE)
+
+            if len(gap) > 8:
+                cnt = 8
+            else:
+                cnt = len(gap)
+
+            for i in range(cnt):
+                plt.subplot(1, cnt, i+1)
+                plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
+                plt.axis('off')         # 關閉邊框
+            # plt.show()
+
+            plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+
             totlal_acc += Accuracy
             total_true += kfold_true
             total_pred += kfold_pred
@@ -332,6 +351,8 @@ if __name__ == '__main__':
                             "Test Specificity" : Specificity,
                             "Test Sensitivity" : Sensitivity
                         })
+                wb_run.log({"image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
+                
                 # wb_run.finish()
 
             print("===================================================================================================")
