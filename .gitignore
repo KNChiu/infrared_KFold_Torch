@@ -1,5 +1,6 @@
 /wandb
 /logs
+/catboost_info
 *.pyc
 *.ckpt
 *.onnx
