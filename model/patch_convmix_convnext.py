@@ -150,21 +150,19 @@ class PatchConvmixConvnext(nn.Module):
     def forward(self, x):
         x = self.patch_embed(x)
         x = self.cm_layer(x)
-
         # x = self.convNeXt(x)
-
         gap = torch.mean(x,1)       # 可視化層
-
         # x = self.gap(x)
         # x = self.norm(x.mean([-2, -1]))             # global average pooling, (N, C, H, W) -> (N, C)
         x = x.mean([-2, -1])
+        featureOut = x
         # x = self.flat(x)
 
         x = self.fc1(x)
         x = self.fc2(x)
         output = self.fc3(x)
         # output = self.head(x)
-        return output, gap
+        return output, gap, featureOut
 
 if __name__ == '__main__':
     import torch
