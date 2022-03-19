@@ -29,36 +29,6 @@ import wandb
 import time
 
 #%%   
-def gradCamImg(model, logPath):
-    # checkpoint = r'save.pt'
-    image_path = r'data\new_cc\correct\0a3d5f0d-6d26-4186-a4fe-7d6b2869216e_20210511_105912.png'
-    
-    # img = cv2.imread(image_path)
-    # img = cv2.resize(img, (640, 640))
-
-    # torch.save(model.state_dict(), "save.pt")
-    
-    rgb_img, cam_image, cam_mask, cam_gb, gb = Grad_CAM.get_cam(model=model, image_path=image_path)
-
-
-    fig = plt.figure()
-    subplot1=fig.add_subplot(2, 2, 1)
-    subplot1.imshow(rgb_img)
-
-    subplot2=fig.add_subplot(2, 2, 2)
-    subplot2.imshow(cam_image)
-
-    subplot3=fig.add_subplot(2, 2, 3)
-    subplot3.imshow(cam_mask)
-
-    subplot4=fig.add_subplot(2, 2, 4)
-    subplot4.imshow(cam_gb)
-
-    fig.suptitle("Grad Cam of Training")
-
-    plt.savefig(logPath+"//"+"gradCam_"+str(time.strftime("%H%M%S", time.localtime()))+".jpg", bbox_inches='tight')
-    plt.close('all')
-
 def get_img_from_fig(fig, dpi=100):                       # plt 轉為 numpy
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi)
@@ -71,52 +41,34 @@ def get_img_from_fig(fig, dpi=100):                       # plt 轉為 numpy
     return img
 
 def confusion(y_true, y_pred, calsses, logPath=None):
-    # confmat = confusion_matrix(y_true, y_pred, labels=[0, 1, 2])
-    # fig, ax = plt.subplots(figsize=(2.5, 2.5))
-
-    # ax.matshow(confmat, cmap=plt.cm.Blues, alpha=0.3)
-    # for i in range(confmat.shape[0]):
-    #     for j in range(confmat.shape[1]):
-    #         ax.text(x=j, y=i, s=confmat[i,j], va='center', ha='center', fontsize=10)
-    # print(y_true)
-    # print(y_pred)
-    # print(confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).ravel())
-    # TN, FP, FN, TP = confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).ravel()
-    # Accuracy = (TP+TN)/(TP+FP+FN+TN)
-    # # precision = TP / (TP + FP)
-    # # recall = TP / (TP + FN)
-
-    # if (TN + FP) == 0:
-    #     Specificity = 0.0
-    # else:
-    #     Specificity = TN / (TN + FP)
-
-    # if (TP + FN) == 0:
-    #     Sensitivity = 0.0
-    # else:
-    #     Sensitivity = TP / (TP + FN)
-
-
-
     Accuracy = accuracy_score(y_true, y_pred)
     Specificity = 0.0
     Sensitivity = 0.0
 
-    if logPath:
+    if len(calsses) == 2:
+        cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1])
+        TN, FP, FN, TP = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+        if (TN + FP) != 0:
+            Specificity = TN / (TN + FP)
+        if (TP + FN) != 0:
+            Sensitivity = TP / (TP + FN)
+    else:
         cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1, 2])
+
+    if logPath:
         df_cm = pd.DataFrame(cf_matrix, calsses, calsses)
         plt.figure(figsize = (9,6))
         sns.heatmap(df_cm, annot=True, fmt="d", cmap='BuGn')
         plt.xlabel('Predict', fontsize=10)        
         plt.ylabel('True', fontsize=10)
-        
         plt.title('Accuracy : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
-        plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
-        wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
+
+        if WANDBRUN:
+            plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy]
+            wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
 
         plt.savefig(logPath + "//" + "confusion.jpg", bbox_inches='tight')
-        # plt.close('all')
-        plt.close()
+        plt.close('all')
 
     return Accuracy, Specificity, Sensitivity
 
@@ -149,8 +101,10 @@ def compute_auc(y_true, y_score, classes, logPath=None):
             plt.ylabel('True Positive Rate')
             plt.title('multi-calss ROC')
             plt.legend(loc="lower right")
+
             plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
-            wb_run.log({"compute_auc": [wandb.Image(plot_img_np)]})
+            if WANDBRUN:
+                wb_run.log({"compute_auc": [wandb.Image(plot_img_np)]})
             plt.savefig(logPath + "//" + "compute_auc.jpg", bbox_inches='tight')
             plt.close()
     else:
@@ -161,9 +115,10 @@ def compute_auc(y_true, y_score, classes, logPath=None):
 def fit_model(model, train_loader, val_loader, classes):
     optimizer = torch.optim.Adam(model.parameters(), lr = LR)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
-    loss_func = FocalLoss(class_num=3, alpha = None, gamma = 4)
+    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 4)
 
     for epoch in range(EPOCH):
+        # val
         model.train()
         training_loss = 0
 
@@ -178,6 +133,7 @@ def fit_model(model, train_loader, val_loader, classes):
             loss.backward()
             optimizer.step()
         
+        # val
         model.eval()
         y_pred_score =[]
         y_true = []
@@ -214,6 +170,7 @@ def fit_model(model, train_loader, val_loader, classes):
     return training_loss, val_loss
 
 def test_model(model, test_loader, classes):
+    # test
     model.eval()
     correct = 0
     y_true = []
@@ -223,17 +180,13 @@ def test_model(model, test_loader, classes):
     with torch.no_grad():
         for idx, (x, y) in enumerate(test_loader):
             pred = model(x.to(device))
-
             pred, gap = pred
-
-            # if type(pred) == tuple:
-            #     pred = pred[0]
 
             y_pred_score += pred.tolist()
 
+            # 計算是否正確
             pred = torch.max(pred.data, 1)[1] 
             correct += (pred == y.to(device)).sum()
-            # print('Pred : {}, True : {}'.format(pred, y))
 
             y_true += y.tolist()
             y_pred += pred.tolist()
@@ -251,13 +204,16 @@ if __name__ == '__main__':
     WANDBRUN = True
     SEED = 42
     
+    # CLASSNANE = ['Ischemia', 'Infect']
     CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
+    # CLASSNANE = ['class_1', 'class_2', 'class_3']
 
-    KFOLD_N = 83
-    EPOCH = 40
+    KFOLD_N = 2
+    EPOCH = 1
     BATCHSIZE = 16
     LR = 0.0001
 
+    # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_kfold'
     DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
     # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
 
@@ -269,22 +225,18 @@ if __name__ == '__main__':
         torch.manual_seed(SEED)
         torch.cuda.manual_seed_all(SEED)
 
+    # 建立 log
     logPath = r"logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
     if not os.path.isdir(logPath):
         os.mkdir(logPath)
-
     
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    model = PatchConvmixConvnext(dim = 768, depth = 3, kernel_size = 7, patch_size = 16, n_classes = 3).to(device)
-    # if WANDBRUN:
-    #     wandb.watch(model)
 
     transform = transforms.Compose([transforms.Resize((640, 640)),
                                     transforms.ToTensor()])
 
     if ISKFOLD:
-        dataset = ImageFolder(DATAPATH, transform)
-
+        dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
         kf = KFold(n_splits = KFOLD_N, shuffle = True)
         Kfold_cnt = 0
         acc_array = []
@@ -293,36 +245,35 @@ if __name__ == '__main__':
         total_pred_score = []
         totlal_acc = 0
 
-        # json_dict = {'Kfold_cnt' :[], 'train_idx': [], 'val_idx': []}
-        # json_file = open(logPath + '//'+ 'kfold_idx.json', "w")
-        # json.dump(json_dict, json_file, indent=4)
-        # json_file.close()
-
+        # KFOLD
         for train_idx, val_idx in kf.split(dataset):
-            if WANDBRUN:
-                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_class_4", name=str("kfold_N="+str(Kfold_cnt+1)))
             Kfold_cnt += 1
 
+            if WANDBRUN:
+                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt)))
+            
             if SAVEIDX:
                 json_dict = {'Kfold_cnt' : Kfold_cnt, 'val_idx': val_idx.tolist()}
                 json_file = open(logPath + '//'+ 'kfold_idx.json', "a")
                 json.dump(json_dict, json_file, indent=4)
                 json_file.close()
-
-
-            # if not os.path.isdir(KFoldPath):
-            #     os.mkdir(KFoldPath)
-            # print(KFoldPath)
             
+            # 重組 kfold 數據集
             train = Subset(dataset, train_idx)
             val = Subset(dataset, val_idx)
         
             train_loader = DataLoader(train, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
             val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
-            
+
+            # 匯入模型
+            model = PatchConvmixConvnext(dim = 768, depth = 3, kernel_size = 7, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
+
+            # Train
             fit_model(model, train_loader, val_loader, CLASSNANE)
 
+            # Test
             Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap = test_model(model, val_loader, CLASSNANE)
+
 
             if len(gap) > 8:
                 cnt = 8
@@ -333,14 +284,15 @@ if __name__ == '__main__':
                 plt.subplot(1, cnt, i+1)
                 plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
                 plt.axis('off')         # 關閉邊框
-            # plt.show()
 
             plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+            plt.close('all')
 
             totlal_acc += Accuracy
             total_true += kfold_true
             total_pred += kfold_pred
             total_pred_score += kfold_pred_score
+
             if roc_auc != -1:
                 roc_auc = max(roc_auc.values())
 
@@ -353,8 +305,6 @@ if __name__ == '__main__':
                         })
                 wb_run.log({"image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
                 
-                # wb_run.finish()
-
             print("===================================================================================================")
             print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
             print("===================================================================================================")
@@ -370,8 +320,10 @@ if __name__ == '__main__':
         print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
         print("Total AUC: ", roc_auc)
         print("===================================================================================================")
+
         if roc_auc != -1:
             roc_auc = max(roc_auc.values())
+
         if WANDBRUN:
             wb_run.log({
                         "KFold Accuracy" : Accuracy,
