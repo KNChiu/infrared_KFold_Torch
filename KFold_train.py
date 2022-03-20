@@ -117,8 +117,11 @@ def compute_auc(y_true, y_score, classes, logPath=None, mode = ''):
 
 def fit_model(model, train_loader, val_loader, classes):
     optimizer = torch.optim.Adam(model.parameters(), lr = LR)
+    # optimizer = torch.optim.SGD(model.parameters(), lr = LR)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
     loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 4)
+
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
 
     for epoch in range(EPOCH):
         # val
@@ -130,11 +133,16 @@ def fit_model(model, train_loader, val_loader, classes):
         train_y_pred = []
 
         for idx, (x, y) in enumerate(train_loader):
+            optimizer.zero_grad()
+
             output = model(x.to(device))
             outPred = output[0]
 
             loss = loss_func(outPred, y.to(device))
             training_loss += loss.item()
+            
+            loss.backward()
+            optimizer.step()
 
             train_y_pred_score += outPred.tolist()
 
@@ -143,10 +151,6 @@ def fit_model(model, train_loader, val_loader, classes):
 
             train_y_true += y.tolist()
             train_y_pred += pred.tolist()
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
 
         train_roc_auc = compute_auc(train_y_true, train_y_pred_score, classes)
         train_Accuracy, Specificity, Sensitivity = confusion(train_y_true, train_y_pred, classes)
@@ -159,12 +163,9 @@ def fit_model(model, train_loader, val_loader, classes):
         with torch.no_grad():
             val_loss = 0
             for idx, (x_, y_) in enumerate(val_loader):
-                pred = model(x_.to(device))
+                pred, gap, test_feature = model(x_.to(device))
                 loss_ = loss_func(pred, y_.to(device))
                 val_loss += loss_.item()
-
-                if type(pred) == tuple:
-                    pred = pred[0]
 
                 y_pred_score += pred.tolist()
                 
@@ -177,6 +178,20 @@ def fit_model(model, train_loader, val_loader, classes):
                 
             roc_auc = compute_auc(y_true, y_pred_score, classes)
             Accuracy, Specificity, Sensitivity = confusion(y_true, y_pred, classes)
+
+            if len(gap) > 8:
+                cnt = 8
+            else:
+                cnt = len(gap)
+
+            for i in range(cnt):
+                plt.subplot(1, cnt, i+1)
+                plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
+                plt.axis('off')         # 關閉邊框
+            
+            plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+            plt.close('all')
+
 
         if roc_auc != -1:
             train_roc_auc = max(train_roc_auc.values())
@@ -192,11 +207,11 @@ def fit_model(model, train_loader, val_loader, classes):
                         "Val AUC" : roc_auc,
                         "Val ACC" : Accuracy,
                     })
-            # wb_run.finish()
-            
-        print('  => Epoch : {}  Training Loss : {:.4e}  Val Loss : {:.4e}  Val AUC : {:.2}'.format(epoch + 1, training_loss, val_loss, roc_auc))
+            wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
 
-        # torch.save(model.state_dict(), "last.pth")
+            
+        print('  => Epoch : {}  Training Loss : {:.4e}  Val Loss : {:.4e}  Val ACC : {:.2}  Val AUC : {:.2}'.format(epoch + 1, training_loss, val_loss, Accuracy, roc_auc))
+
     return training_loss, val_loss
 
 def test_model(model, test_loader, classes):
@@ -242,6 +257,21 @@ def load_feature(dataloader, model):
     label = np.array(label)
     return feature, label
 
+def draw_gap(gap):
+    if len(gap) > 8:
+        cnt = 8
+    else:
+        cnt = len(gap)
+
+    for i in range(cnt):
+        plt.subplot(1, cnt, i+1)
+        plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
+        plt.axis('off')         # 關閉邊框
+
+    plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+    plt.close('all')
+    return plot_img_np
+
 def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBoost_depth):
     cbc = cb.CatBoostClassifier(random_state=42, use_best_model=True, iterations=iterations, depth = CatBoost_depth)
     cbc.fit(train_data, train_label,
@@ -264,10 +294,10 @@ if __name__ == '__main__':
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
     # CLASSNANE = ['class_1', 'class_2', 'class_3']
-
+    CNN_DETPH = 4
     KFOLD_N = 10
     EPOCH = 100
-    BATCHSIZE = 16
+    BATCHSIZE = 32
     LR = 0.0001
 
     CATBOOTS_INTER = 200
@@ -286,7 +316,7 @@ if __name__ == '__main__':
         torch.cuda.manual_seed_all(SEED)
 
     # 建立 log
-    logPath = r"logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
+    logPath = r"C:\Data\外科溫度\訓練log\logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
     if not os.path.isdir(logPath):
         os.mkdir(logPath)
     
@@ -300,7 +330,7 @@ if __name__ == '__main__':
         kf = KFold(n_splits = KFOLD_N, shuffle = True)
         Kfold_cnt = 0
         # acc_array = []
-        totlal_acc = 0
+        # totlal_acc = 0
         total_true = []
         total_pred = []
         total_pred_score = []
@@ -314,7 +344,7 @@ if __name__ == '__main__':
             Kfold_cnt += 1
 
             if WANDBRUN:
-                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt)))
+                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str("kfold_N="+str(Kfold_cnt)))
             
             if SAVEIDX:
                 with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
@@ -339,7 +369,7 @@ if __name__ == '__main__':
             val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
 
             # 匯入模型
-            model = PatchConvmixConvnext(dim = 768, depth = 3, kernel_size = 7, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
+            model = PatchConvmixConvnext(dim = 768, depth = CNN_DETPH, kernel_size = 7, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
 
             # Train
             fit_model(model, train_loader, val_loader, CLASSNANE)
@@ -347,20 +377,6 @@ if __name__ == '__main__':
             # Test
             Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap = test_model(model, val_loader, CLASSNANE)
 
-            if len(gap) > 8:
-                cnt = 8
-            else:
-                cnt = len(gap)
-
-            for i in range(cnt):
-                plt.subplot(1, cnt, i+1)
-                plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
-                plt.axis('off')         # 關閉邊框
-
-            plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
-            plt.close('all')
-
-            totlal_acc += Accuracy
             total_true += kfold_true
             total_pred += kfold_pred
             total_pred_score += kfold_pred_score
@@ -383,9 +399,6 @@ if __name__ == '__main__':
                             "CNN Specificity" : Specificity,
                             "CNN Sensitivity" : Sensitivity,
                         })
-                wb_run.log({"image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
-
-
 
 # ML ===============================================================
             if RUNML:
