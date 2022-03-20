@@ -43,7 +43,7 @@ def get_img_from_fig(fig, dpi=100):                       # plt 轉為 numpy
 
     return img
 
-def confusion(y_true, y_pred, calsses, logPath=None):
+def confusion(y_true, y_pred, calsses, logPath=None, mode = ''):
     Accuracy = accuracy_score(y_true, y_pred)
     Specificity = 0.0
     Sensitivity = 0.0
@@ -64,18 +64,18 @@ def confusion(y_true, y_pred, calsses, logPath=None):
         sns.heatmap(df_cm, annot=True, fmt="d", cmap='BuGn')
         plt.xlabel('Predict', fontsize=10)        
         plt.ylabel('True', fontsize=10)
-        plt.title('Accuracy : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
+        plt.title(str(mode) + '_Acc : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
 
         if WANDBRUN:
             plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy]
             wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
 
-        plt.savefig(logPath + "//" + "confusion.jpg", bbox_inches='tight')
+        plt.savefig(logPath + "//" + str(mode) + "_confusion.jpg", bbox_inches='tight')
         plt.close('all')
 
     return Accuracy, Specificity, Sensitivity
 
-def compute_auc(y_true, y_score, classes, logPath=None):
+def compute_auc(y_true, y_score, classes, logPath=None, mode = ''):
     colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
 
     fpr, tpr, roc_auc = dict(), dict(), dict()
@@ -102,13 +102,13 @@ def compute_auc(y_true, y_score, classes, logPath=None):
             plt.ylim([0.0, 1.05])
             plt.xlabel('False Positive Rate')
             plt.ylabel('True Positive Rate')
-            plt.title('multi-calss ROC')
+            plt.title(str(mode) + '_multi-calss ROC')
             plt.legend(loc="lower right")
 
             plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
             if WANDBRUN:
                 wb_run.log({"compute_auc": [wandb.Image(plot_img_np)]})
-            plt.savefig(logPath + "//" + "compute_auc.jpg", bbox_inches='tight')
+            plt.savefig(logPath + "//" + str(mode) +"_compute_auc.jpg", bbox_inches='tight')
             plt.close()
     else:
         roc_auc = -1.00
@@ -125,6 +125,10 @@ def fit_model(model, train_loader, val_loader, classes):
         model.train()
         training_loss = 0
 
+        train_y_pred_score =[]
+        train_y_true = []
+        train_y_pred = []
+
         for idx, (x, y) in enumerate(train_loader):
             output = model(x.to(device))
             outPred = output[0]
@@ -132,14 +136,26 @@ def fit_model(model, train_loader, val_loader, classes):
             loss = loss_func(outPred, y.to(device))
             training_loss += loss.item()
 
+            train_y_pred_score += outPred.tolist()
+
+            # 計算是否正確
+            pred = torch.max(outPred.data, 1)[1] 
+
+            train_y_true += y.tolist()
+            train_y_pred += pred.tolist()
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+        train_roc_auc = compute_auc(train_y_true, train_y_pred_score, classes)
+        train_Accuracy, Specificity, Sensitivity = confusion(train_y_true, train_y_pred, classes)
         
         # val
         model.eval()
         y_pred_score =[]
         y_true = []
+        y_pred = []
         with torch.no_grad():
             val_loss = 0
             for idx, (x_, y_) in enumerate(val_loader):
@@ -151,19 +167,30 @@ def fit_model(model, train_loader, val_loader, classes):
                     pred = pred[0]
 
                 y_pred_score += pred.tolist()
+                
+                # 計算是否正確
+                pred = torch.max(pred.data, 1)[1] 
+                
+                y_pred += pred.tolist()
                 y_true += y_.tolist()
+
                 
             roc_auc = compute_auc(y_true, y_pred_score, classes)
+            Accuracy, Specificity, Sensitivity = confusion(y_true, y_pred, classes)
 
         if roc_auc != -1:
+            train_roc_auc = max(train_roc_auc.values())
             roc_auc = max(roc_auc.values())
 
         if WANDBRUN:
             wb_run.log({ 
                         "Epoch" : epoch + 1,
                         "Training Loss": training_loss,
+                        "Train ACC" : train_Accuracy,
+                        "Train AUC" : train_roc_auc,
                         "Val Loss": val_loss,
                         "Val AUC" : roc_auc,
+                        "Val ACC" : Accuracy,
                     })
             # wb_run.finish()
             
@@ -175,7 +202,7 @@ def fit_model(model, train_loader, val_loader, classes):
 def test_model(model, test_loader, classes):
     # test
     model.eval()
-    correct = 0
+    # correct = 0
     y_true = []
     y_pred = []
     y_pred_score = []
@@ -189,7 +216,7 @@ def test_model(model, test_loader, classes):
 
             # 計算是否正確
             pred = torch.max(pred.data, 1)[1] 
-            correct += (pred == y.to(device)).sum()
+            # correct += (pred == y.to(device)).sum()
 
             y_true += y.tolist()
             y_pred += pred.tolist()
@@ -228,21 +255,22 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBo
 
 if __name__ == '__main__':
     ISKFOLD = True
-    SAVEPTH = False
+    SAVEPTH = True
     SAVEIDX = True
     WANDBRUN = True
+    RUNML = False
     SEED = 42
     
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
     # CLASSNANE = ['class_1', 'class_2', 'class_3']
 
-    KFOLD_N = 2
-    EPOCH = 1
+    KFOLD_N = 10
+    EPOCH = 100
     BATCHSIZE = 16
     LR = 0.0001
 
-    CATBOOTS_INTER = 100
+    CATBOOTS_INTER = 200
     ACTBOOTS_DETPH = 1
 
     DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_kfold'
@@ -277,7 +305,6 @@ if __name__ == '__main__':
         total_pred = []
         total_pred_score = []
 
-        ML_totlal_acc = 0
         ML_total_true = []
         ML_total_pred = []
         ML_total_pred_score = []
@@ -290,10 +317,19 @@ if __name__ == '__main__':
                 wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_1", name=str("kfold_N="+str(Kfold_cnt)))
             
             if SAVEIDX:
-                json_dict = {'Kfold_cnt' : Kfold_cnt, 'val_idx': val_idx.tolist()}
-                json_file = open(logPath + '//'+ 'kfold_idx.json', "a")
-                json.dump(json_dict, json_file, indent=4)
-                json_file.close()
+                with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
+                    json_file.seek(0)  
+                    if json_file.read() =='':  
+                        data = {}
+                    else:
+                        json_file.seek(0)
+                        data = json.load(json_file)
+
+                    data['Kfold_cnt' + str(Kfold_cnt)] = {'train_idx':train_idx.tolist(), 'val_idx':val_idx.tolist()}
+
+                    json_file.seek(0)
+                    json_file.truncate()
+                    json.dump(data, json_file, indent=2, ensure_ascii=False)
             
             # 重組 kfold 數據集
             train = Subset(dataset, train_idx)
@@ -332,38 +368,13 @@ if __name__ == '__main__':
             if roc_auc != -1:
                 roc_auc = max(roc_auc.values())
 
-                
-            # print("==================================== CNN Training=================================================")
-            # print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
-            # print("===================================================================================================")
+            print("==================================== CNN Training=================================================")
+            print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
+            print("===================================================================================================")
             
             if SAVEPTH:
                 saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
                 torch.save(model.state_dict(), saveModelpath)
-
-            # 強分類器
-            # 提取特徵圖
-            print("================================= Catboots Training ==============================================")
-            ML_train_loader = DataLoader(train, shuffle = np.True_)
-            ML_val_loader = DataLoader(val, shuffle = True)
-            feature_train_data, feature_train_label = load_feature(ML_train_loader, model)
-            feature_val_data, feature_val_label = load_feature(ML_val_loader, model)
-            predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER, ACTBOOTS_DETPH)
-
-            ML_roc_auc = compute_auc(feature_val_label, feature_val_data, CLASSNANE)
-            ML_Accuracy, ML_Specificity, ML_Sensitivity = confusion(feature_val_label, predict, CLASSNANE, logPath)
-
-            if ML_roc_auc != -1:
-                ML_roc_auc = max(ML_roc_auc.values())
-
-            # print("===================================================================================================")
-            # print('Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(ML_Accuracy, ML_roc_auc, ML_Specificity, ML_Sensitivity))
-            # print("===================================================================================================")
-
-            # print("===================================================================================================")
-            print("Kfold : {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(Kfold_cnt, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-            print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
-            print("===================================================================================================")
 
             if WANDBRUN:
                 wb_run.log({
@@ -371,45 +382,55 @@ if __name__ == '__main__':
                             "CNN AUC" : roc_auc,
                             "CNN Specificity" : Specificity,
                             "CNN Sensitivity" : Sensitivity,
-
-                            "ML Accuracy" : ML_Accuracy,
-                            "ML AUC" : ML_roc_auc,
-                            "ML Specificity" : ML_Specificity,
-                            "ML Sensitivity" : ML_Sensitivity
                         })
                 wb_run.log({"image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
+
+
+
+# ML ===============================================================
+            if RUNML:
+                # 強分類器
+                # 提取特徵圖
+                print("================================= Catboots Training ==============================================")
+                ML_train_loader = DataLoader(train, shuffle = np.True_)
+                ML_val_loader = DataLoader(val, shuffle = True)
+
+                feature_train_data, feature_train_label = load_feature(ML_train_loader, model)
+                feature_val_data, feature_val_label = load_feature(ML_val_loader, model)
+
+                predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER, ACTBOOTS_DETPH)
+
+                ML_roc_auc = compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath, mode = 'ML_' + str(Kfold_cnt))
+                ML_Accuracy, ML_Specificity, ML_Sensitivity = confusion(feature_val_label, predict, CLASSNANE, logPath, mode ='ML_' + str(Kfold_cnt))
+
+                if ML_roc_auc != -1:
+                    ML_roc_auc = max(ML_roc_auc.values())
+
+                print("Kfold : {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(Kfold_cnt, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+                print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
+                print("===================================================================================================")
+
+                if WANDBRUN:
+                    wb_run.log({
+                                "ML Accuracy" : ML_Accuracy,
+                                "ML AUC" : ML_roc_auc,
+                                "ML Specificity" : ML_Specificity,
+                                "ML Sensitivity" : ML_Sensitivity
+                            })
+                
+                ML_total_true += feature_val_label.tolist()
+                ML_total_pred += predict.tolist()
+                ML_total_pred_score += predict_Probability.tolist()
             
 
 
-            ML_totlal_acc += Accuracy.tolist()
-            ML_total_true += feature_val_label.tolist()
-            ML_total_pred += predict.tolist()
-            ML_total_pred_score += predict_Probability.tolist()
-            
+# Kflod end ================================================
         # Kfold CNN 結束交叉驗證
-        Accuracy, Specificity, Sensitivity = confusion(total_true, total_pred, CLASSNANE, logPath)
-        roc_auc = compute_auc(total_true, total_pred_score, CLASSNANE, logPath)
-
-        # Kfold ML 結束交叉驗證
-        ML_Accuracy, ML_Specificity, ML_Sensitivity = confusion(ML_total_true, ML_total_pred, CLASSNANE, logPath)
-        ML_roc_auc = compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath)
-
+        Accuracy, Specificity, Sensitivity = confusion(total_true, total_pred, CLASSNANE, logPath, mode = 'Kfold_CNN')
+        roc_auc = compute_auc(total_true, total_pred_score, CLASSNANE, logPath, mode = 'Kfold_CNN')
+        
         if roc_auc != -1:
-            roc_auc = float(max(roc_auc))
-            ML_roc_auc = float(max(ML_roc_auc))
-
-        # print("===================================================================================================")
-        # print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
-        # print("Total AUC: ", roc_auc)
-        # print("===================================================================================================")
-        print("============================-== KFlod Finish =====================================================")
-        print("Kfold:N= {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-        print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
-        print("===================================================================================================")
-
-        # if roc_auc != -1:
-        #     roc_auc = float(max(roc_auc))
-
+                roc_auc = float(max(roc_auc))
         if WANDBRUN:
             wb_run.log({
                         "KFold_CNN=>ML Accuracy" : Accuracy,
@@ -418,13 +439,34 @@ if __name__ == '__main__':
                         "KFold_CNN=>ML Sensitivity" : Sensitivity.item()
                     })
 
-            wb_run.log({
-                        "KFold_CNN=>ML Accuracy" : ML_Accuracy,
-                        "KFold_CNN=>ML AUC" : ML_roc_auc,
-                        "KFold_CNN=>ML Specificity" : ML_Specificity.item(),
-                        "KFold_CNN=>ML Sensitivity" : ML_Sensitivity.item()
-                    })
-            wb_run.finish()
+
+        if RUNML:
+            # Kfold ML 結束交叉驗證
+            ML_Accuracy, ML_Specificity, ML_Sensitivity = confusion(ML_total_true, ML_total_pred, CLASSNANE, logPath, mode = 'Kfold_ML')
+            ML_roc_auc = compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath, mode = 'Kfold_ML')
+
+            if roc_auc != -1:
+                ML_roc_auc = float(max(ML_roc_auc))
+
+            # print("===================================================================================================")
+            # print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
+            # print("Total AUC: ", roc_auc)
+            # print("===================================================================================================")
+            print("============================-== KFlod Finish =====================================================")
+            print("Kfold:N= {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
+            print("===================================================================================================")
+
+            # if roc_auc != -1:
+            #     roc_auc = float(max(roc_auc))
+
+            if WANDBRUN:
+                wb_run.log({
+                            "KFold_CNN=>ML Accuracy" : ML_Accuracy,
+                            "KFold_CNN=>ML AUC" : ML_roc_auc,
+                            "KFold_CNN=>ML Specificity" : ML_Specificity.item(),
+                            "KFold_CNN=>ML Sensitivity" : ML_Sensitivity.item()
+                        })
 
     if WANDBRUN:
         wb_run.finish()
