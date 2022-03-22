@@ -1,6 +1,7 @@
 #%%
 from functools import total_ordering
 import os
+from unittest.mock import patch
 import cv2
 import random
 import io
@@ -19,6 +20,10 @@ from torchvision.datasets import ImageFolder
 from torchvision import transforms
 
 from model.patch_convmix_convnext import PatchConvmixConvnext
+from model.patch_RepLKNet_DRSN import PatchRepLKNetDRSN
+from model.patch_RepLKNet_Attention import PatchRepLKNetAttention
+
+
 from model.focal_loss import FocalLoss
 import json
 
@@ -30,6 +35,108 @@ import time
 
 import catboost as cb
 
+#%%
+import concurrent
+from torch.utils.data import Dataset
+
+
+def loadimg(job_path):
+    inputImg = cv2.imread(job_path)
+    inputImg = cv2.resize(inputImg, (640, 640), interpolation=cv2.INTER_AREA)
+
+    return inputImg, job_path
+
+def load_mut(path_fold:str,mutPath:str,cpu_count:int) -> dict:
+    import pickle
+    
+        # path_fold => r'C:\Users\sk\Desktop\sanzuo\transform\\'
+    
+    if os.path.isfile(mutPath + '\load_mut.json'):
+        print("使用暫存檔讀資料")
+        with open(mutPath + '\load_mut.json', 'rb') as fp:
+            Data_all = pickle.load(fp)
+        return Data_all
+    else:
+        print("站存檔不存在，重新創建")
+        job_path = []
+        Data_all = {}
+
+        for classes in ['0_Ischemia','1_Infect']:
+            f = path_fold+classes+'/'
+
+            for img_name in os.listdir(f):
+                if (img_name.split('.')[-1]) == "jpg":
+                    job_path += [f+img_name]
+            # job_path += [f+img_name for img_name in os.listdir(f)]
+        try:
+            with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
+                    future = list(executor.map(loadimg, job_path))
+        except:
+            print("\r 多進程失敗 使用單進程讀圖")
+            future = list(map(loadimg, job_path))
+
+        for img, file_path in future:
+            path, img_name = os.path.split(file_path)
+            _, classes = os.path.split(path)
+            key = img_name.split('_')[0] + '_' + classes
+
+            if key in Data_all:
+                Data_all[key].append(img)
+            else:
+                Data_all[key] = img   
+
+        # 寫入暫存檔
+        with open(mutPath + '\load_mut.json', 'wb') as fp:
+            pickle.dump(Data_all, fp)
+        
+        return Data_all
+
+class MyDataset(Dataset):
+    def __init__(self,data:dict):
+        print("開始讀檔")
+        self.data = []
+        self.label = []
+        self.key = []
+        self._dict2tensor(data)
+        print("讀檔完畢")
+
+
+    def __getitem__(self,index):
+        """_summary_
+
+        Args:
+            index (_type_): description
+
+        Returns:
+            list[list,list,list]: [data,label,key]
+        """
+        return self.data[index],self.label[index],self.key[index]
+
+    def __len__(self):
+        return len(self.data)
+    
+    def _dict2tensor(self,data:dict) -> None:
+        # to_numpy = np.array
+        # from sklearn import preprocessing
+        # zscore = preprocessing.StandardScaler
+        for key in data:
+            # print(key)
+            label = 0 if key.split("_")[-1] == "Ischemia" else 1
+            # print(data[key])
+            # data_numpy = to_numpy(data[key])
+            # data_zs = zscore().fit_transform(data_numpy)
+            data_zs = data[key]
+            self.data.append(data_zs)
+            self.label.append(label)
+            self.key.append(key)
+        
+        self.data = torch.Tensor(self.data).permute(0,3,1,2)
+        self.label = torch.LongTensor(self.label)
+        self.key = np.array(self.key)
+# path = r'C:/Data/cut_kfold/'
+
+# data_all = load_mut(path, 2)
+
 
 #%%   
 def get_img_from_fig(fig, dpi=100):                       # plt 轉為 numpy
@@ -40,7 +147,7 @@ def get_img_from_fig(fig, dpi=100):                       # plt 轉為 numpy
     buf.close()
     img = cv2.imdecode(img_arr, 1)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
+    # plt.close('all')
     return img
 
 def confusion(y_true, y_pred, calsses, logPath=None, mode = ''):
@@ -58,7 +165,9 @@ def confusion(y_true, y_pred, calsses, logPath=None, mode = ''):
     else:
         cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1, 2])
 
+
     if logPath:
+        plt.close("all")
         df_cm = pd.DataFrame(cf_matrix, calsses, calsses)
         plt.figure(figsize = (9,6))
         sns.heatmap(df_cm, annot=True, fmt="d", cmap='BuGn')
@@ -90,6 +199,7 @@ def compute_auc(y_true, y_score, classes, logPath=None, mode = ''):
 
         # Plot all ROC curves
         if logPath:
+            plt.close("all")
             plt.figure()
             
             for i, color in zip(range(len(classes)), colors):
@@ -109,7 +219,7 @@ def compute_auc(y_true, y_score, classes, logPath=None, mode = ''):
             if WANDBRUN:
                 wb_run.log({"compute_auc": [wandb.Image(plot_img_np)]})
             plt.savefig(logPath + "//" + str(mode) +"_compute_auc.jpg", bbox_inches='tight')
-            plt.close()
+            plt.close("all")
     else:
         roc_auc = -1.00
 
@@ -122,9 +232,8 @@ def fit_model(model, train_loader, val_loader, classes):
     loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 4)
 
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
-
+    # print("1")
     for epoch in range(EPOCH):
-        # val
         model.train()
         training_loss = 0
 
@@ -132,7 +241,7 @@ def fit_model(model, train_loader, val_loader, classes):
         train_y_true = []
         train_y_pred = []
 
-        for idx, (x, y) in enumerate(train_loader):
+        for idx, (x, y, _) in enumerate(train_loader):
             optimizer.zero_grad()
 
             output = model(x.to(device))
@@ -151,7 +260,7 @@ def fit_model(model, train_loader, val_loader, classes):
 
             train_y_true += y.tolist()
             train_y_pred += pred.tolist()
-
+            
         train_roc_auc = compute_auc(train_y_true, train_y_pred_score, classes)
         train_Accuracy, Specificity, Sensitivity = confusion(train_y_true, train_y_pred, classes)
         
@@ -162,7 +271,7 @@ def fit_model(model, train_loader, val_loader, classes):
         y_pred = []
         with torch.no_grad():
             val_loss = 0
-            for idx, (x_, y_) in enumerate(val_loader):
+            for idx, (x_, y_, _) in enumerate(val_loader):
                 pred, gap, test_feature = model(x_.to(device))
                 loss_ = loss_func(pred, y_.to(device))
                 val_loss += loss_.item()
@@ -175,24 +284,10 @@ def fit_model(model, train_loader, val_loader, classes):
                 y_pred += pred.tolist()
                 y_true += y_.tolist()
 
-                
             roc_auc = compute_auc(y_true, y_pred_score, classes)
             Accuracy, Specificity, Sensitivity = confusion(y_true, y_pred, classes)
 
-            if len(gap) > 8:
-                cnt = 8
-            else:
-                cnt = len(gap)
-
-            for i in range(cnt):
-                plt.subplot(1, cnt, i+1)
-                plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
-                plt.axis('off')         # 關閉邊框
             
-            plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
-            plt.close('all')
-
-
         if roc_auc != -1:
             train_roc_auc = max(train_roc_auc.values())
             roc_auc = max(roc_auc.values())
@@ -206,13 +301,30 @@ def fit_model(model, train_loader, val_loader, classes):
                         "Val Loss": val_loss,
                         "Val AUC" : roc_auc,
                         "Val ACC" : Accuracy,
+                                 # 將可視化上傳 wandb
                     })
-            wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
 
-            
+            if epoch % 20 == 0:    
+                if len(gap) > 8:
+                    cnt = 8
+                else:
+                    cnt = len(gap)
+
+                plt.close('all')
+                for i in range(cnt):
+                    plt.subplot(1, cnt, i+1)
+                    plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
+                    plt.axis('off')         # 關閉邊框
+                
+                # plt.show()
+                plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
+                plt.close('all')
+                
+                wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
+
         print('  => Epoch : {}  Training Loss : {:.4e}  Val Loss : {:.4e}  Val ACC : {:.2}  Val AUC : {:.2}'.format(epoch + 1, training_loss, val_loss, Accuracy, roc_auc))
 
-    return training_loss, val_loss
+    return training_loss, val_loss 
 
 def test_model(model, test_loader, classes):
     # test
@@ -223,7 +335,7 @@ def test_model(model, test_loader, classes):
     y_pred_score = []
 
     with torch.no_grad():
-        for idx, (x, y) in enumerate(test_loader):
+        for idx, (x, y, _) in enumerate(test_loader):
             pred = model(x.to(device))
             pred, gap, test_feature = pred
 
@@ -244,7 +356,7 @@ def test_model(model, test_loader, classes):
 
 def load_feature(dataloader, model):
     feature, label = [], []
-    for idx, (x, y) in enumerate(dataloader):
+    for idx, (x, y, _) in enumerate(dataloader):
         _, _, featureOut = model(x.to(device))
 
         featureOut = featureOut[0].to('cpu').detach().numpy()
@@ -294,18 +406,22 @@ if __name__ == '__main__':
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
     # CLASSNANE = ['class_1', 'class_2', 'class_3']
-    CNN_DETPH = 4
-    KFOLD_N = 10
-    EPOCH = 100
-    BATCHSIZE = 32
-    LR = 0.0001
+    CNN_DETPH = 1
+    KFOLD_N = 82
+    EPOCH = 300
+    BATCHSIZE = 16
+    LR = 0.001
 
     CATBOOTS_INTER = 200
     ACTBOOTS_DETPH = 1
 
-    DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_kfold'
+    LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
+    DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_3_2_kfold\\'
     # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
     # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
+
+    D = MyDataset(load_mut(DATAPATH, LOGPATH, 2))
+
 
     if SEED:
         '''設定隨機種子碼'''
@@ -316,9 +432,10 @@ if __name__ == '__main__':
         torch.cuda.manual_seed_all(SEED)
 
     # 建立 log
-    logPath = r"C:\Data\外科溫度\訓練log\logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
+    logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
     if not os.path.isdir(logPath):
         os.mkdir(logPath)
+        os.mkdir(logPath+'//img//')
     
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -326,7 +443,8 @@ if __name__ == '__main__':
                                     transforms.ToTensor()])
 
     if ISKFOLD:
-        dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
+        # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
+        dataset  = D
         kf = KFold(n_splits = KFOLD_N, shuffle = True)
         Kfold_cnt = 0
         # acc_array = []
@@ -364,12 +482,12 @@ if __name__ == '__main__':
             # 重組 kfold 數據集
             train = Subset(dataset, train_idx)
             val = Subset(dataset, val_idx)
-        
-            train_loader = DataLoader(train, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
-            val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True, num_workers = 2)
+            
+            train_loader = DataLoader(train, batch_size = BATCHSIZE, shuffle = True)
+            val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True)
 
             # 匯入模型
-            model = PatchConvmixConvnext(dim = 768, depth = CNN_DETPH, kernel_size = 7, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
+            model = PatchRepLKNetAttention(dim = 768, depth = CNN_DETPH, kernel_size = 15, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
 
             # Train
             fit_model(model, train_loader, val_loader, CLASSNANE)
@@ -484,3 +602,110 @@ if __name__ == '__main__':
     if WANDBRUN:
         wb_run.finish()
 
+#%%
+
+# import concurrent
+# import tqdm
+# from torch.utils.data import Dataset
+
+
+# def loadimg(job_path):
+#     inputImg = cv2.imread(job_path)
+#     inputImg = cv2.resize(inputImg, (640, 640), interpolation=cv2.INTER_AREA)
+
+#     return inputImg, job_path
+
+# def load_mut(path_fold:str,cpu_count:int) -> dict:
+#     import pickle
+    
+#         # path_fold => r'C:\Users\sk\Desktop\sanzuo\transform\\'
+    
+#     if os.path.isfile('load_mut.json'):
+#         print("使用暫存檔讀資料")
+#         with open('load_mut.json', 'rb') as fp:
+#             Data_all = pickle.load(fp)
+#         return Data_all
+#     else:
+#         print("站存檔不存在，重新創建")
+#         job_path = []
+#         Data_all = {}
+
+#         for classes in ['0_Ischemia','1_Infect']:
+#             f = path_fold+classes+'/'
+#             job_path += [f+img_name for img_name in os.listdir(f)]
+#             # print(job_path)
+#         try:
+#             with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
+#                     future = list(executor.map(loadimg, job_path))
+#         except:
+#             print("\r 多進程失敗 使用單進程讀圖")
+#             future = list(map(loadimg, job_path))
+
+#         for img, file_path in future:
+#             path, img_name = os.path.split(file_path)
+#             _, classes = os.path.split(path)
+#             key = img_name.split('_')[0] + '_' + classes
+
+#             if key in Data_all:
+#                 Data_all[key].append(img)
+#             else:
+#                 Data_all[key] = img   
+
+#         # 寫入暫存檔
+#         with open('load_mut.json', 'wb') as fp:
+#             pickle.dump(Data_all, fp)
+        
+#         return Data_all
+
+
+# class MyDataset(Dataset):
+#     def __init__(self,data:dict):
+#         self.data = []
+#         self.label = []
+#         self.key = []
+#         self._dict2tensor(data)
+
+#     def __getitem__(self,index):
+#         """_summary_
+
+#         Args:
+#             index (_type_): description
+
+#         Returns:
+#             list[list,list,list]: [data,label,key]
+#         """
+#         return self.data[index],self.label[index],self.key[index]
+
+#     def __len__(self):
+#         return len(self.data)
+    
+#     def _dict2tensor(self,data:dict) -> None:
+#         # 1=>NG 0=>G
+#         to_numpy = np.array
+#         from sklearn import preprocessing
+#         zscore = preprocessing.StandardScaler
+#         for key in data:
+#             # print(key)
+#             label = 0 if key.split("_")[-1] == "0_Ischemia" else 1
+#             # print(data[key])
+#             # data_numpy = to_numpy(data[key])
+#             # data_zs = zscore().fit_transform(data_numpy)
+#             data_zs = data[key]
+#             self.data.append(data_zs)
+#             self.label.append(label)
+#             self.key.append(key)
+        
+#         self.data = torch.Tensor(self.data).permute(0,3,1,2)
+#         self.label = torch.LongTensor(self.label)
+#         self.key = np.array(self.key)
+
+
+
+# # path = r'C:/Data/cut_kfold/'
+
+# # data_all = load_mut(path, 2)
+# path = r'C:/Data/cut_kfold/'
+# D = MyDataset(load_mut(path, 2))
+
+
+# # %%
