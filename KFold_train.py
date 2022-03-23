@@ -48,6 +48,7 @@ def fit_model(model, train_loader, val_loader, classes):
 
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
     # print("1")
+    mini_val_loss = 100
     for epoch in range(EPOCH):
         model.train()
         training_loss = 0
@@ -137,6 +138,16 @@ def fit_model(model, train_loader, val_loader, classes):
                 
                 wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
 
+        if SAVEPTH:
+            if SAVEBASE and epoch > 10:
+                if mini_val_loss > val_loss:
+                    mini_val_loss = val_loss
+                    saveModelpath = logPath + "//" + str(Kfold_cnt) + "_bast.pth"
+                    torch.save(model.state_dict(), saveModelpath)
+            elif epoch == EPOCH - 1:
+                saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
+                torch.save(model.state_dict(), saveModelpath)
+
         print('  => Epoch : {}  Training Loss : {:.4e}  Val Loss : {:.4e}  Val ACC : {:.2}  Val AUC : {:.2}'.format(epoch + 1, training_loss, val_loss, Accuracy, roc_auc))
 
     return training_loss, val_loss 
@@ -184,21 +195,6 @@ def load_feature(dataloader, model):
     label = np.array(label)
     return feature, label
 
-# def draw_gap(gap):
-#     if len(gap) > 8:
-#         cnt = 8
-#     else:
-#         cnt = len(gap)
-
-#     for i in range(cnt):
-#         plt.subplot(1, cnt, i+1)
-#         plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
-#         plt.axis('off')         # 關閉邊框
-
-#     plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy
-#     plt.close('all')
-#     return plot_img_np
-
 def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBoost_depth):
     cbc = cb.CatBoostClassifier(random_state=42, use_best_model=True, iterations=iterations, depth = CatBoost_depth)
     cbc.fit(train_data, train_label,
@@ -215,17 +211,18 @@ if __name__ == '__main__':
     SAVEPTH = True
     SAVEIDX = True
     WANDBRUN = True
+    SAVEBASE = True
     RUNML = False
     SEED = 42
     
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
-    CNN_DETPH = 3
+    CNN_DETPH = 2
     KERNELSIZE = 7
 
 
-    KFOLD_N = 2
-    EPOCH = 1
+    KFOLD_N = 10
+    EPOCH = 300
     BATCHSIZE = 16
     # LR = 0.01
     LR = 0.0001
@@ -327,10 +324,7 @@ if __name__ == '__main__':
             print("==================================== CNN Training=================================================")
             print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
             print("===================================================================================================")
-            
-            if SAVEPTH:
-                saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
-                torch.save(model.state_dict(), saveModelpath)
+        
 
             if WANDBRUN:
                 wb_run.log({
