@@ -52,7 +52,7 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBo
 #%%
 CLASSNANE = ['Ischemia', 'Infect']
 SEED = 42
-CNN_DETPH = 3
+CNN_DETPH = 1
 KERNELSIZE = 7
 LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
 DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_3_2_kfold\\'
@@ -61,12 +61,12 @@ DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_3_2_kfold\\'
 
 MyEstimator = MyEstimator()
 D = MyDataset(DATAPATH, LOGPATH, 2)
-logPath = r'C:\Data\surgical_temperature\trainingLogs\logs\0323_0237'
+logPath = r'C:\Data\surgical_temperature\trainingLogs\logs\ACC_067_AUC_068'
 
 # KFOLD_CNT = 3
 
 CATBOOTS_INTER = 1000
-ACTBOOTS_DETPH = 2
+ACTBOOTS_DETPH = 4
 LOAD_FEATUR_DETPH = 1
 if SEED:
     '''設定隨機種子碼'''

@@ -13,80 +13,101 @@ class Residual(nn.Module):
         return self.fn(x) + x
 
 
-def RepLKNet(dim, depth, kernel_size):
-    return nn.Sequential(   
-        *[nn.Sequential( 
-            Residual(nn.Sequential(
+class Shrinkage(nn.Module):
+    def __init__(self, gap_size, channel):
+        super(Shrinkage, self).__init__()
+        self.gap = nn.AdaptiveAvgPool2d(gap_size)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel),
+            nn.BatchNorm1d(channel),
+            nn.ReLU(inplace=True),
+            nn.Linear (channel, 1), # probably NN. Linear (channel, channel)
+            nn.Sigmoid(),
+        )
+    def forward(self, x):
+        x_raw = x
+        x = torch.abs(x)
+        x_abs = x
+        x = self.gap(x)
+
+        x = torch.flatten(x, 1)
+        # average = torch.mean(x, dim=1, keepdim=True)
+        average = x
+        x = self.fc(x)
+        x = torch.mul(average, x)
+
+        x = x.unsqueeze(2).unsqueeze(2)
+        #Soft thresholding
+        sub = x_abs - x
+        zeros = sub - sub
+        n_sub = torch.max(sub, zeros)
+        x = torch.mul(torch.sign(x_raw), n_sub)
+        return x
+
+
+class RepLKNet(nn.Module):
+    def __init__(self, dim, depth, kernel_size):
+        super(RepLKNet, self).__init__()
+        self.dim = dim
+        self.depth = depth
+        self.kernel_size = kernel_size
+
+        self.large_kernel = nn.Sequential(
                 nn.Conv2d(dim, dim, kernel_size=1),
-                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same'),
+                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=3),
                 nn.Conv2d(dim, dim, kernel_size=1),
-                nn.BatchNorm2d(dim),
-            )), 
-            Residual(nn.Sequential(
+                nn.BatchNorm2d(dim)
+            )
+
+        self.small_kernel = nn.Sequential(
                 nn.Conv2d(dim, dim, kernel_size=1),
                 nn.GELU(),
                 nn.Conv2d(dim, dim, kernel_size=1),
                 nn.BatchNorm2d(dim)
-            )), 
-        )for i in range(depth)], 
-    )
-
-
-
-def convmixer_layer(dim, depth, kernel_size):
-    return nn.Sequential(
-        *[nn.Sequential(
-                # Residual(nn.Sequential(
-                    Residual(nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size, groups=dim, padding='same'),
-                        nn.GELU(),
-                        nn.BatchNorm2d(dim)
-                    )),
-                    nn.Conv2d(dim, dim, kernel_size=1, padding = 1),
-                    nn.GELU(),
-                    nn.BatchNorm2d(dim)
-                # ))
-        ) for i in range(depth)],
-    )
-    
-class ChannelAttention(nn.Module):
-    def __init__(self, in_planes, ratio=16):
-        super(ChannelAttention, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
-           
-        self.fc = nn.Sequential(nn.Conv2d(in_planes, in_planes // 16, 1, bias=False),
-                               nn.ReLU(),
-                               nn.Conv2d(in_planes // 16, in_planes, 1, bias=False))
-        self.sigmoid = nn.Sigmoid()
+            )
+        self.Shrinkage = Shrinkage((1,1), 256)
 
     def forward(self, x):
-        avg_out = self.fc(self.avg_pool(x))
-        max_out = self.fc(self.max_pool(x))
-        out = avg_out + max_out
-        return self.sigmoid(out)
+        rest_x = x
+        x = self.large_kernel(x)
+        ShrinkageOut = self.Shrinkage(x)
+        x = torch.mul(ShrinkageOut, x)
+        x = rest_x + x
+        x = self.small_kernel(x)
 
-class SpatialAttention(nn.Module):
-    def __init__(self, kernel_size=7):
-        super(SpatialAttention, self).__init__()
+        return x
 
-        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=kernel_size//2, bias=False)
-        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        avg_out = torch.mean(x, dim=1, keepdim=True)
-        max_out, _ = torch.max(x, dim=1, keepdim=True)
-        x = torch.cat([avg_out, max_out], dim=1)
-        x = self.conv1(x)
-        return self.sigmoid(x)
-    
-class PatchConvmixConvnext(nn.Module):
+
+
+
+
+# def RepLKNet(dim, depth, kernel_size):
+#     return nn.Sequential(   
+#         *[nn.Sequential( 
+#             Residual(nn.Sequential(
+#                 nn.Conv2d(dim, dim, kernel_size=1),
+#                 nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same'),
+#                 nn.Conv2d(dim, dim, kernel_size=1),
+#                 nn.BatchNorm2d(dim),
+#             )), 
+#             Residual(nn.Sequential(
+#                 nn.Conv2d(dim, dim, kernel_size=1),
+#                 nn.GELU(),
+#                 nn.Conv2d(dim, dim, kernel_size=1),
+#                 nn.BatchNorm2d(dim)
+#             )), 
+#         )for i in range(depth)], 
+#     )
+
+
+class PatchRepLKNetDRSN(nn.Module):
     def __init__(self, dim = 768, depth = 3, kernel_size = 7, patch_size = 16, n_classes = 2):
-        super(PatchConvmixConvnext, self).__init__()
+        super(PatchRepLKNetDRSN, self).__init__()
         self.dim = dim
         self.depth = depth
         self.n_class = n_classes
-        # self.inside_dim = inside_dim
+
         self.kernel_size = kernel_size
 
         self.patch_embed = nn.Sequential(
@@ -96,11 +117,8 @@ class PatchConvmixConvnext(nn.Module):
             nn.BatchNorm2d(dim)
         )
 
-        self.cm_layer = convmixer_layer(self.dim, self.depth, self.kernel_size)
-
-        # self.convNeXt = nn.Sequential(
-        #     *[Block(dim=dim) for i in range(3)]
-        # )
+        self.downC = nn.Conv2d(dim, 256, kernel_size=1)
+        self.RepLKNet = RepLKNet(256, depth, kernel_size)
 
         self.gap = nn.AdaptiveAvgPool2d((1,1))
         self.flat = nn.Flatten()
@@ -114,7 +132,10 @@ class PatchConvmixConvnext(nn.Module):
     
     def forward(self, x):
         x = self.patch_embed(x)
-        x = self.cm_layer(x)
+        # x = self.cm_layer(x)
+        x = self.downC(x)
+        
+        x = self.RepLKNet(x)
 
         gap = torch.mean(x,1)       # 可視化層
         featureOut = x.mean([-2, -1])
@@ -136,7 +157,7 @@ if __name__ == '__main__':
     # GPU
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     print('GPU State:', device)
-    model = PatchConvmixConvnext(dim = 768, depth = 4, kernel_size = 7, patch_size = 16, n_classes = 2)
+    model = PatchRepLKNetDRSN(dim = 768, depth = 4, kernel_size = 7, patch_size = 16, n_classes = 2)
     # print(model)
 
     heat_visual = False
@@ -180,7 +201,7 @@ if __name__ == '__main__':
                 plt.show()
 
     else:
-        _input = torch.randn(1, 3, 640, 640)
+        _input = torch.randn(2, 3, 640, 640)
         s = model(_input)
 
         # print(s[1][0].detach().numpy().shape)

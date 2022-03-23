@@ -27,6 +27,7 @@ class MyEstimator():
         Accuracy = accuracy_score(y_true, y_pred)
         Specificity = 0.0
         Sensitivity = 0.0
+        plot_img_np = None
 
         if len(calsses) == 2:
             cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1])
@@ -38,7 +39,6 @@ class MyEstimator():
         else:
             cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1, 2])
 
-
         if logPath:
             plt.close("all")
             df_cm = pd.DataFrame(cf_matrix, calsses, calsses)
@@ -48,14 +48,11 @@ class MyEstimator():
             plt.ylabel('True', fontsize=10)
             plt.title(str(mode) + '_Acc : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
 
-            # if WANDBRUN:
-            #     plot_img_np = get_img_from_fig(plt)    # plt 轉為 numpy]
-            #     wb_run.log({"confusion": [wandb.Image(plot_img_np)]})
-
+            plot_img_np = self.get_img_from_fig(plt)    # plt 轉為 numpy]
             plt.savefig(logPath + "//" + str(mode) + "_confusion.jpg", bbox_inches='tight')
             plt.close('all')
 
-        return Accuracy, Specificity, Sensitivity
+        return Accuracy, Specificity, Sensitivity, plot_img_np
 
     def compute_auc(self, y_true, y_score, classes, logPath=None, mode = ''):
         colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
@@ -64,6 +61,7 @@ class MyEstimator():
         y_label = np.eye(len(classes))[y_true]
         y_label = y_label.reshape(len(y_true), len(classes))
         y_score = np.array(y_score)
+        plot_img_np = None
 
         if len(y_label) > 1 :
             for i in range(len(classes)):
@@ -89,11 +87,9 @@ class MyEstimator():
                 plt.legend(loc="lower right")
 
                 plot_img_np = self.get_img_from_fig(plt)    # plt 轉為 numpy
-                # if WANDBRUN:
-                #     wb_run.log({"compute_auc": [wandb.Image(plot_img_np)]})
                 plt.savefig(logPath + "//" + str(mode) +"_compute_auc.jpg", bbox_inches='tight')
                 plt.close("all")
         else:
             roc_auc = -1.00
 
-        return roc_auc
+        return roc_auc, plot_img_np

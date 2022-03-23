@@ -47,16 +47,17 @@ def RepLKNet(dim, depth, kernel_size):
     return nn.Sequential(   
         *[nn.Sequential( 
             Residual(nn.Sequential(
-                nn.Conv2d(dim, dim, kernel_size=1),
+                # nn.Conv2d(dim, dim, kernel_size=1),
                 nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same'),
                 nn.GELU(),
-                nn.Conv2d(dim, dim, kernel_size=1),
+                # nn.Conv2d(dim, dim, kernel_size=1),
                 nn.BatchNorm2d(dim),
             )), 
             Residual(nn.Sequential(
                 nn.Conv2d(dim, dim, kernel_size=1),
+                # nn.Conv2d(dim, dim, kernel_size=3, padding='same'),
                 nn.GELU(),
-                nn.Conv2d(dim, dim, kernel_size=1),
+                # nn.Conv2d(dim, dim, kernel_size=1),
                 nn.BatchNorm2d(dim)
             )), 
         )for i in range(depth)], 

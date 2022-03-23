@@ -1,3 +1,4 @@
+/.vscode
 /wandb
 /logs
 /catboost_info
