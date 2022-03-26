@@ -19,9 +19,9 @@ from torch.utils.data import random_split, DataLoader, Subset
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
 
-from model.patch_convmix_convnext import PatchConvmixConvnext
-from model.patch_RepLKNet_DRSN import PatchRepLKNetDRSN
-from model.patch_RepLKNet_Attention import PatchRepLKNetAttention
+# from model.patch_convmix_convnext import PatchConvmixConvnext
+# from model.patch_RepLKNet_DRSN import PatchRepLKNetDRSN
+from model.patch_convmix_Attention import PatchConvMixerAttention
 
 from model.load_dataset import MyDataset
 
@@ -78,7 +78,7 @@ def fit_model(model, train_loader, val_loader, classes):
             train_y_pred += pred.tolist()
             
         train_roc_auc, _ = MyEstimator.compute_auc(train_y_true, train_y_pred_score, classes)
-        train_Accuracy, Specificity, Sensitivity, _ = MyEstimator.confusion(train_y_true, train_y_pred, classes)
+        train_Accuracy, Specificity, Sensitivity, _ ,_ = MyEstimator.confusion(train_y_true, train_y_pred, val_keyLabel=None, logPath = None, classes = classes)
         
         # val
         model.eval()
@@ -101,7 +101,7 @@ def fit_model(model, train_loader, val_loader, classes):
                 y_true += y_.tolist()
 
             roc_auc, _ = MyEstimator.compute_auc(y_true, y_pred_score, classes)
-            Accuracy, Specificity, Sensitivity, _ = MyEstimator.confusion(y_true, y_pred, classes)
+            Accuracy, Specificity, Sensitivity, _, _ = MyEstimator.confusion(y_true, y_pred, val_keyLabel=None, logPath = None, classes = classes)
 
             
         if roc_auc != -1:
@@ -139,12 +139,12 @@ def fit_model(model, train_loader, val_loader, classes):
                 wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
 
         if SAVEPTH:
-            if SAVEBASE and epoch > 10:
+            if SAVEBAST and epoch > 10:
                 if mini_val_loss > val_loss:
                     mini_val_loss = val_loss
                     saveModelpath = logPath + "//" + str(Kfold_cnt) + "_bast.pth"
                     torch.save(model.state_dict(), saveModelpath)
-            elif epoch == EPOCH - 1:
+            if epoch == EPOCH - 1:
                 saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
                 torch.save(model.state_dict(), saveModelpath)
 
@@ -154,14 +154,23 @@ def fit_model(model, train_loader, val_loader, classes):
 
 def test_model(model, test_loader, classes):
     # test
+    if SAVEBAST: 
+        saveModelpath = logPath + "//" + str(Kfold_cnt) + "_bast.pth"
+    else:
+        saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
+
     model.eval()
+    model.load_state_dict(torch.load(saveModelpath))
+    model.to(device)
     # correct = 0
     y_true = []
     y_pred = []
     y_pred_score = []
+    keyLabel = []
 
     with torch.no_grad():
-        for idx, (x, y, _) in enumerate(test_loader):
+        for idx, (x, y, key) in enumerate(test_loader):
+            keyLabel += key
             pred = model(x.to(device))
             pred, gap, test_feature = pred
 
@@ -175,10 +184,10 @@ def test_model(model, test_loader, classes):
             y_pred += pred.tolist()
             
         
-        Accuracy, Specificity, Sensitivity, _ = MyEstimator.confusion(y_true, y_pred, classes)
+        Accuracy, Specificity, Sensitivity, error_list, _ = MyEstimator.confusion(y_true, y_pred, val_keyLabel=keyLabel, logPath = None, classes = classes)
         roc_auc, _ = MyEstimator.compute_auc(y_true, y_pred_score, classes)
 
-        return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score, gap
+        return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score, gap, keyLabel, error_list
 
 def load_feature(dataloader, model):
     feature, label = [], []
@@ -211,18 +220,18 @@ if __name__ == '__main__':
     SAVEPTH = True
     SAVEIDX = True
     WANDBRUN = True
-    SAVEBASE = True
+    SAVEBAST = True
     RUNML = False
     SEED = 42
     
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
-    CNN_DETPH = 2
+    CNN_DETPH = 3
     KERNELSIZE = 7
 
 
     KFOLD_N = 10
-    EPOCH = 300
+    EPOCH = 200
     BATCHSIZE = 16
     # LR = 0.01
     LR = 0.0001
@@ -232,7 +241,7 @@ if __name__ == '__main__':
     ACTBOOTS_DETPH = 1
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
-    DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_3_2_kfold\\'
+    DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_96\\'
     # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
     # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
 
@@ -275,6 +284,7 @@ if __name__ == '__main__':
         ML_total_true = []
         ML_total_pred = []
         ML_total_pred_score = []
+        total_keyLabel = []
 
         # KFOLD
         for train_idx, val_idx in kf.split(dataset):
@@ -306,23 +316,28 @@ if __name__ == '__main__':
             val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True)
 
             # 匯入模型
-            model = PatchRepLKNetAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
+            model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
 
             # Train
             fit_model(model, train_loader, val_loader, CLASSNANE)
 
             # Test
-            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap = test_model(model, val_loader, CLASSNANE)
+            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap, val_keyLabel, error_list = test_model(model, val_loader, CLASSNANE)
 
             total_true += kfold_true
             total_pred += kfold_pred
             total_pred_score += kfold_pred_score
+            total_keyLabel += val_keyLabel
 
             if roc_auc != -1:
                 roc_auc = max(roc_auc.values())
 
             print("==================================== CNN Training=================================================")
             print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
+            print("True : 1 but 0 :")
+            print(error_list['1_to_0'])
+            print("True : 0 but 1 :")
+            print(error_list['0_to_1'])
             print("===================================================================================================")
         
 
@@ -348,7 +363,7 @@ if __name__ == '__main__':
                 predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER, ACTBOOTS_DETPH)
 
                 ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath, mode = 'ML_' + str(Kfold_cnt))
-                ML_Accuracy, ML_Specificity, ML_Sensitivity, confusion_img = MyEstimator.confusion(feature_val_label, predict, CLASSNANE, logPath, mode ='ML_' + str(Kfold_cnt))
+                ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, val_keyLabel=None, classes = CLASSNANE, logPath = logPath, mode ='ML_' + str(Kfold_cnt))
 
                 if ML_roc_auc != -1:
                     ML_roc_auc = max(ML_roc_auc.values())
@@ -374,9 +389,15 @@ if __name__ == '__main__':
 
 # Kflod end ================================================
         # Kfold CNN 結束交叉驗證
-        Accuracy, Specificity, Sensitivity, confusion_img = MyEstimator.confusion(total_true, total_pred, CLASSNANE, logPath, mode = 'Kfold_CNN')
+        Accuracy, Specificity, Sensitivity, error_list, confusion_img = MyEstimator.confusion(total_true, total_pred, total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_CNN')
         roc_auc, compute_img = MyEstimator.compute_auc(total_true, total_pred_score, CLASSNANE, logPath, mode = 'Kfold_CNN')
         
+        print("True : 1 but 0 :")
+        print(error_list['1_to_0'])
+        print("True : 0 but 1 :")
+        print(error_list['0_to_1'])
+
+
         if roc_auc != -1:
                 roc_auc = float(max(roc_auc))
         if WANDBRUN:
@@ -391,7 +412,7 @@ if __name__ == '__main__':
 
         if RUNML:
             # Kfold ML 結束交叉驗證
-            ML_Accuracy, ML_Specificity, ML_Sensitivity, compute_img = MyEstimator.confusion(ML_total_true, ML_total_pred, CLASSNANE, logPath, mode = 'Kfold_ML')
+            ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, compute_img = MyEstimator.confusion(ML_total_true, ML_total_pred, val_keyLabel=None, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_ML')
             ML_roc_auc, confusion_img = MyEstimator.compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath, mode = 'Kfold_ML')
 
             if roc_auc != -1:
