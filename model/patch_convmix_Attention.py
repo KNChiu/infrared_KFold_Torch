@@ -48,13 +48,15 @@ def convmixer_layer(dim, depth, kernel_size):
         *[nn.Sequential( 
             Residual(nn.Sequential(
                 # nn.Conv2d(dim, dim, kernel_size=1),
-                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same'),
+                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
+                ChannelAttention(dim),
                 nn.GELU(),
                 # nn.Conv2d(dim, dim, kernel_size=1),
                 nn.BatchNorm2d(dim),
             )), 
             Residual(nn.Sequential(
                 nn.Conv2d(dim, dim, kernel_size=1),
+                ChannelAttention(dim),
                 # nn.Conv2d(dim, dim, kernel_size=3, padding='same'),
                 nn.GELU(),
                 # nn.Conv2d(dim, dim, kernel_size=1),
@@ -102,7 +104,6 @@ class PatchConvMixerAttention(nn.Module):
     
     def forward(self, x):
         x = self.patch_embed(x)
-        # x = self.cm_layer(x)
         x = self.downC(x)
         x = self.cm_layer(x)
 
