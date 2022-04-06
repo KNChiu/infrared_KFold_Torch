@@ -47,7 +47,7 @@ def convmixer_layer(dim, depth, kernel_size):
     return nn.Sequential(   
         *[nn.Sequential( 
             Residual(nn.Sequential(
-                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=3, dilation=1, groups=dim),
+                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=dilation_rate+1, groups=dim),
                 ChannelAttention(dim),
                 nn.GELU(),
                 nn.BatchNorm2d(dim),
@@ -78,12 +78,9 @@ class PatchConvMixerAttention(nn.Module):
         self.ca = ChannelAttention(dim)
         self.sa = SpatialAttention()
 
-        # self.cm_layer = convmixer_layer(self.dim, self.depth, self.kernel_size)
         self.downC = nn.Conv2d(dim, dim, kernel_size=1)
         self.cm_layer = convmixer_layer(dim, depth, kernel_size)
-        # self.convNeXt = nn.Sequential(
-        #     *[Block(dim=dim) for i in range(3)]
-        # )
+
 
         self.gap = nn.AdaptiveAvgPool2d((1,1))
 
@@ -91,12 +88,6 @@ class PatchConvMixerAttention(nn.Module):
 
         self.fc = nn.Linear(dim, n_classes)
 
-        # self.fc1 = nn.Linear(dim, 64)
-        # self.fc2 = nn.Linear(64, 16)
-        # self.fc3 = nn.Linear(16, n_classes)
-
-        # self.norm = nn.LayerNorm(dim, eps=1e-6) # final norm layer
-        # self.head = nn.Linear(dim, n_classes)
     
     def forward(self, x):
         x = self.patch_embed(x)
