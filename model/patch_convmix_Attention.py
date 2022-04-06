@@ -47,22 +47,18 @@ def convmixer_layer(dim, depth, kernel_size):
     return nn.Sequential(   
         *[nn.Sequential( 
             Residual(nn.Sequential(
-                # nn.Conv2d(dim, dim, kernel_size=1),
-                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
+                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding=3, dilation=1, groups=dim),
                 ChannelAttention(dim),
                 nn.GELU(),
-                # nn.Conv2d(dim, dim, kernel_size=1),
                 nn.BatchNorm2d(dim),
             )), 
             Residual(nn.Sequential(
                 nn.Conv2d(dim, dim, kernel_size=1),
                 ChannelAttention(dim),
-                # nn.Conv2d(dim, dim, kernel_size=3, padding='same'),
                 nn.GELU(),
-                # nn.Conv2d(dim, dim, kernel_size=1),
                 nn.BatchNorm2d(dim)
             )), 
-        )for i in range(depth)], 
+        )for dilation_rate in range(depth)], 
     )
 
 class PatchConvMixerAttention(nn.Module):
@@ -128,7 +124,7 @@ if __name__ == '__main__':
     # GPU
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     print('GPU State:', device)
-    model = PatchConvMixerAttention(dim = 768, depth = 4, kernel_size = 7, patch_size = 16, n_classes = 2)
+    model = PatchConvMixerAttention(dim = 768, depth = 3, kernel_size = 7, patch_size = 16, n_classes = 2)
     # print(model)
 
     heat_visual = False
@@ -172,7 +168,7 @@ if __name__ == '__main__':
                 plt.show()
 
     else:
-        _input = torch.randn(1, 3, 640, 640)
+        _input = torch.randn(2, 3, 640, 640)
         s = model(_input)
 
         # print(s[1][0].detach().numpy().shape)
