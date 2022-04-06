@@ -39,6 +39,18 @@ import catboost as cb
 from model.load_dataset import MyDataset
 from model.assessment_tool import MyEstimator
 
+SEED = 42
+if SEED:
+    '''設定隨機種子碼'''
+    os.environ["PL_GLOBAL_SEED"] = str(SEED)
+    os.environ['PYTHONHASHSEED'] = str(SEED)
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
+
 
 def fit_model(model, train_loader, val_loader, classes):
     # optimizer = torch.optim.Adam(model.parameters(), lr = LR)
@@ -50,7 +62,6 @@ def fit_model(model, train_loader, val_loader, classes):
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH, eta_min=0)
     mini_val_loss = 100
     for epoch in range(EPOCH):
-        model.train()
         training_loss = 0
 
         train_y_pred_score =[]
@@ -58,6 +69,7 @@ def fit_model(model, train_loader, val_loader, classes):
         train_y_pred = []
 
         for idx, (x, y, _) in enumerate(train_loader):
+            model.train()
             optimizer.zero_grad()
 
             output = model(x.to(device))
@@ -123,24 +135,24 @@ def fit_model(model, train_loader, val_loader, classes):
                         "LR" : cur_lr,
                                  # 將可視化上傳 wandb
                     })
+            if DRAWIMG != 0:
+                if epoch % DRAWIMG == 0 :    
+                    if len(gap) > 8:
+                        cnt = 8
+                    else:
+                        cnt = len(gap)
 
-            if epoch % DRAWIMG == 0:    
-                if len(gap) > 8:
-                    cnt = 8
-                else:
-                    cnt = len(gap)
-
-                plt.close('all')
-                for i in range(cnt):
-                    plt.subplot(1, cnt, i+1)
-                    plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
-                    plt.axis('off')         # 關閉邊框
-                
-                # plt.show()
-                plot_img_np = MyEstimator.get_img_from_fig(plt)    # plt 轉為 numpy
-                plt.close('all')
-                
-                wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
+                    plt.close('all')
+                    for i in range(cnt):
+                        plt.subplot(1, cnt, i+1)
+                        plt.imshow(gap[i].cpu().detach().numpy())   # 將注意力圖像取出
+                        plt.axis('off')         # 關閉邊框
+                    
+                    # plt.show()
+                    plot_img_np = MyEstimator.get_img_from_fig(plt)    # plt 轉為 numpy
+                    plt.close('all')
+                    
+                    wb_run.log({"val image": [wandb.Image(plot_img_np)]})   # 將可視化上傳 wandb
 
         if SAVEPTH:
             if SAVEBAST and epoch > 10:
@@ -226,7 +238,7 @@ if __name__ == '__main__':
     WANDBRUN = True
     SAVEBAST = False
     RUNML = False
-    SEED = 42
+    
     
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
@@ -235,11 +247,13 @@ if __name__ == '__main__':
 
 
     KFOLD_N = 10
-    EPOCH = 155
+    # EPOCH = 509
+    EPOCH = 100
+
     BATCHSIZE = 16
     LR = 0.01
     # LR = 0.0001
-    DRAWIMG = 20
+    DRAWIMG = 500
 
     CATBOOTS_INTER = 200
     ACTBOOTS_DETPH = 1
@@ -255,13 +269,7 @@ if __name__ == '__main__':
     D = MyDataset(DATAPATH, LOGPATH, 2)
 
 
-    if SEED:
-        '''設定隨機種子碼'''
-        os.environ["PL_GLOBAL_SEED"] = str(SEED)
-        random.seed(SEED)
-        np.random.seed(SEED)
-        torch.manual_seed(SEED)
-        torch.cuda.manual_seed_all(SEED)
+    
 
     # 建立 log
     logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
