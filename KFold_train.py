@@ -23,8 +23,6 @@ from torchvision import transforms
 # from model.patch_RepLKNet_DRSN import PatchRepLKNetDRSN
 from model.patch_convmix_Attention import PatchConvMixerAttention
 
-from model.load_dataset import MyDataset
-
 from model.focal_loss import FocalLoss
 import json
 
@@ -38,6 +36,8 @@ import catboost as cb
 
 from model.load_dataset import MyDataset
 from model.assessment_tool import MyEstimator
+
+import math
 
 SEED = 42
 if SEED:
@@ -56,10 +56,20 @@ def fit_model(model, train_loader, val_loader, classes):
     # optimizer = torch.optim.Adam(model.parameters(), lr = LR)
     optimizer = torch.optim.SGD(model.parameters(), lr = LR)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
-    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 4)
+    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 2.5)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCH, eta_min=0)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
+    # scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=0, cycle_mult=2.0, max_lr=LR, min_lr=0, warmup_steps=0, gamma=1.0)
+
+
+    # 设置warm up的轮次为100次
+    warm_up_iter = 100
+    T_max = 400	# 周期
+
+    warm_up_with_cosine_lr = lambda epoch: epoch / warm_up_iter if epoch <= warm_up_iter else 0.5 * ( math.cos((epoch - warm_up_iter) /(T_max - warm_up_iter) * math.pi) + 1)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warm_up_with_cosine_lr)
+
+
     mini_val_loss = 100
     for epoch in range(EPOCH):
         training_loss = 0
@@ -67,7 +77,6 @@ def fit_model(model, train_loader, val_loader, classes):
         train_y_pred_score =[]
         train_y_true = []
         train_y_pred = []
-
         for idx, (x, y, _) in enumerate(train_loader):
             model.train()
             optimizer.zero_grad()
@@ -206,9 +215,19 @@ def test_model(model, test_loader, classes):
         return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score, gap, keyLabel, error_list
 
 def load_feature(dataloader, model):
-    feature, label = [], []
-    for idx, (x, y, _) in enumerate(dataloader):
-        _, _, featureOut = model(x.to(device))
+    feature, label, keyLabel = [], [], []
+    for idx, (x, y, key) in enumerate(dataloader):
+        keyLabel += key
+        x = model.patch_embed(x.to(device))
+        x = model.downC(x)
+        
+        x = model.cm_layer(x)
+
+        x = model.ca(x) * x
+
+        # x = x.mean([-2, -1])
+        x = model.gap(x)
+        featureOut = model.flat(x)
 
         featureOut = featureOut[0].to('cpu').detach().numpy()
         featureOut = featureOut.reshape((1, -1))[0]
@@ -218,10 +237,27 @@ def load_feature(dataloader, model):
         
     feature = np.array(feature)
     label = np.array(label)
-    return feature, label
+    return feature, label, keyLabel
 
-def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBoost_depth):
-    cbc = cb.CatBoostClassifier(random_state=42, use_best_model=True, iterations=iterations, depth = CatBoost_depth)
+def catboots_fit(train_data, train_label, val_data, val_label, iterations):
+    # cbc = cb.CatBoostClassifier(random_state=SEED, use_best_model=True, iterations=iterations, depth = CatBoost_depth,random_seed=SEED)
+    # cbc = cb.CatBoostClassifier(iterations=10000,learning_rate=0.1,max_depth=7,verbose=100,
+    #                                   early_stopping_rounds=500,task_type='GPU',eval_metric='AUC',random_seed=SEED)
+    cbc = cb.CatBoostClassifier(
+                               loss_function='MultiClass',
+                                eval_metric='WKappa',
+                               task_type="GPU",
+                            #    learning_rate=0.01,
+                               iterations=iterations,
+                               od_type="Iter",
+                                #depth=4,
+                               early_stopping_rounds=500,
+                                #l2_leaf_reg=10,
+                                #border_count=96,
+                               random_seed=42,
+                                use_best_model=True
+                              )
+
     cbc.fit(train_data, train_label,
             eval_set = [(val_data, val_label)],
             verbose=False,
@@ -245,31 +281,28 @@ if __name__ == '__main__':
     CNN_DETPH = 3
     KERNELSIZE = 7
 
-
     KFOLD_N = 10
-    # EPOCH = 509
-    EPOCH = 100
+    # EPOCH = 10
+    EPOCH = 509
+
+
 
     BATCHSIZE = 16
     LR = 0.01
     # LR = 0.0001
-    DRAWIMG = 500
+    DRAWIMG = 508
 
-    CATBOOTS_INTER = 200
-    ACTBOOTS_DETPH = 1
+    CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
     DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_96\\'
     # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
     # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
 
-    
 
     MyEstimator = MyEstimator()
-    D = MyDataset(DATAPATH, LOGPATH, 2)
+    Dataload = MyDataset(DATAPATH, LOGPATH, 2)
 
-
-    
 
     # 建立 log
     logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
@@ -284,7 +317,7 @@ if __name__ == '__main__':
 
     if ISKFOLD:
         # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
-        dataset  = D
+        dataset  = Dataload
         kf = KFold(n_splits = KFOLD_N, shuffle = True)
         Kfold_cnt = 0
         # acc_array = []
@@ -297,6 +330,7 @@ if __name__ == '__main__':
         ML_total_pred = []
         ML_total_pred_score = []
         total_keyLabel = []
+        ML_total_keyLabel = []
 
         # KFOLD
         for train_idx, val_idx in kf.split(dataset):
@@ -346,10 +380,10 @@ if __name__ == '__main__':
 
             print("==================================== CNN Training=================================================")
             print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
-            print("True : 1 but 0 :")
-            print(error_list['1_to_0'])
-            print("True : 0 but 1 :")
-            print(error_list['0_to_1'])
+            # print("True : 1 but 0 :")
+            # print(error_list['1_to_0'])
+            # print("True : 0 but 1 :")
+            # print(error_list['0_to_1'])
             print("===================================================================================================")
         
 
@@ -369,13 +403,14 @@ if __name__ == '__main__':
                 ML_train_loader = DataLoader(train, shuffle = np.True_)
                 ML_val_loader = DataLoader(val, shuffle = True)
 
-                feature_train_data, feature_train_label = load_feature(ML_train_loader, model)
-                feature_val_data, feature_val_label = load_feature(ML_val_loader, model)
+                feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model)
+                feature_val_data, feature_val_label, ML_val_keyLabel = load_feature(ML_val_loader, model)
+                ML_total_keyLabel += ML_val_keyLabel
 
-                predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER, ACTBOOTS_DETPH)
+                predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
 
-                ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath, mode = 'ML_' + str(Kfold_cnt))
-                ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, val_keyLabel=None, classes = CLASSNANE, logPath = logPath, mode ='ML_' + str(Kfold_cnt))
+                ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(Kfold_cnt))
+                ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, ML_val_keyLabel, classes = CLASSNANE, logPath = logPath+"\\img", mode ='ML_' + str(Kfold_cnt))
 
                 if ML_roc_auc != -1:
                     ML_roc_auc = max(ML_roc_auc.values())
@@ -404,10 +439,11 @@ if __name__ == '__main__':
         Accuracy, Specificity, Sensitivity, error_list, confusion_img = MyEstimator.confusion(total_true, total_pred, total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_CNN')
         roc_auc, compute_img = MyEstimator.compute_auc(total_true, total_pred_score, CLASSNANE, logPath, mode = 'Kfold_CNN')
         
-        print("True : 1 but 0 :")
-        print(error_list['1_to_0'])
-        print("True : 0 but 1 :")
-        print(error_list['0_to_1'])
+        # print("==================================== CNN Training=================================================")
+        # print("True : 1 but 0 :")
+        # print(error_list['1_to_0'])
+        # print("True : 0 but 1 :")
+        # print(error_list['0_to_1'])
 
 
         if roc_auc != -1:
@@ -424,8 +460,14 @@ if __name__ == '__main__':
 
         if RUNML:
             # Kfold ML 結束交叉驗證
-            ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, compute_img = MyEstimator.confusion(ML_total_true, ML_total_pred, val_keyLabel=None, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_ML')
+            ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, compute_img = MyEstimator.confusion(ML_total_true, ML_total_pred, ML_total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_ML')
             ML_roc_auc, confusion_img = MyEstimator.compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath, mode = 'Kfold_ML')
+
+            # print("==================================== ML Training=================================================")
+            # print("True : 1 but 0 :")
+            # print(error_list['1_to_0'])
+            # print("True : 0 but 1 :")
+            # print(error_list['0_to_1'])
 
             if roc_auc != -1:
                 ML_roc_auc = float(max(ML_roc_auc))
