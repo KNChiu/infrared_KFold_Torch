@@ -16,17 +16,33 @@ import catboost as cb
 from model.load_dataset import MyDataset
 from model.assessment_tool import MyEstimator
 
+SEED = 42
+if SEED:
+    '''設定隨機種子碼'''
+    os.environ["PL_GLOBAL_SEED"] = str(SEED)
+    os.environ['PYTHONHASHSEED'] = str(SEED)
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
 #%%
-def load_feature(dataloader, model, depth):
+def load_feature(dataloader, model):
     feature, label, keyLabel = [], [], []
     for idx, (x, y, key) in enumerate(dataloader):
         # _, _, featureOut = model(x.to(device))
         keyLabel += key
         x = model.patch_embed(x.to(device))
         x = model.downC(x)
-        for i in range(depth):
-            x = model.cm_layer[i](x)
-        featureOut = x.mean([-2, -1])
+        
+        x = model.cm_layer(x)
+
+        x = model.ca(x) * x
+
+        # x = x.mean([-2, -1])
+        x = model.gap(x)
+        featureOut = model.flat(x)
 
         featureOut = featureOut[0].to('cpu').detach().numpy()
         featureOut = featureOut.reshape((1, -1))[0]
@@ -38,7 +54,7 @@ def load_feature(dataloader, model, depth):
     label = np.array(label)
     return feature, label, keyLabel
 
-def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBoost_depth=6):
+def catboots_fit(train_data, train_label, val_data, val_label, iterations):
     # cbc = cb.CatBoostClassifier(random_state=SEED, use_best_model=True, iterations=iterations, depth = CatBoost_depth,random_seed=SEED)
     # cbc = cb.CatBoostClassifier(iterations=10000,learning_rate=0.1,max_depth=7,verbose=100,
     #                                   early_stopping_rounds=500,task_type='GPU',eval_metric='AUC',random_seed=SEED)
@@ -68,7 +84,6 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations, CatBo
 
 #%%
 CLASSNANE = ['Ischemia', 'Infect']
-SEED = 42
 CNN_DETPH = 3
 KERNELSIZE = 7
 LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
@@ -77,8 +92,8 @@ DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_96\\'
 # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
 
 MyEstimator = MyEstimator()
-D = MyDataset(DATAPATH, LOGPATH, 2)
-logPath = r'C:\Data\surgical_temperature\trainingLogs\logs\cos_150'
+Dataload = MyDataset(DATAPATH, LOGPATH, 2)
+logPath = r'C:\Data\surgical_temperature\trainingLogs\logs\\\0409_1634'
 KFOLD_N = 10
 # KFOLD_CNT = 3
 
@@ -86,95 +101,87 @@ CATBOOTS_INTER = 1000
 # LOAD_FEATUR_DETPH = 2
 # ACTBOOTS_DETPH = 2
 
-if SEED:
-    '''設定隨機種子碼'''
-    os.environ["PL_GLOBAL_SEED"] = str(SEED)
-    random.seed(SEED)
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)
-
-for loadDetph in range(CNN_DETPH):
-
-    ML_total_true = []
-    ML_total_pred = []
-    ML_total_pred_score = []
-    total_keyLabel = []
-
-    for i in range(KFOLD_N):
-        KFOLD_CNT = i+1
-        WEIGHTPATH = logPath + "\\" +str(KFOLD_CNT) + '_last.pth'
-        with open(logPath + '\\kfold_idx.json', 'r') as f:
-            data = json.load(f)
-
-        # for i in range(10):
-        #     print(data['Kfold_cnt' + str(i+1)])
-        #     # print(data['Kfold_cnt' + str(i+1)]['train_idx'])
-
-        train_idx = data['Kfold_cnt' + str(KFOLD_CNT)]['train_idx']
-        val_idx = data['Kfold_cnt' + str(KFOLD_CNT)]['val_idx']
 
 
-        device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+ML_total_true = []
+ML_total_pred = []
+ML_total_pred_score = []
+total_keyLabel = []
 
-        transform = transforms.Compose([transforms.Resize((640, 640)),
-                                        transforms.ToTensor()])
+for i in range(KFOLD_N):
+    KFOLD_CNT = i+1
+    WEIGHTPATH = logPath + "\\" +str(KFOLD_CNT) + '_last.pth'
+    with open(logPath + '\\kfold_idx.json', 'r') as f:
+        data = json.load(f)
 
-        # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
-        dataset = D 
+    # for i in range(10):
+    #     print(data['Kfold_cnt' + str(i+1)])
+    #     # print(data['Kfold_cnt' + str(i+1)]['train_idx'])
 
-        train = Subset(dataset, train_idx)
-        val = Subset(dataset, val_idx)
-
-        ML_train_loader = DataLoader(train, shuffle = np.True_)
-        ML_val_loader = DataLoader(val, shuffle = True)
+    train_idx = data['Kfold_cnt' + str(KFOLD_CNT)]['train_idx']
+    val_idx = data['Kfold_cnt' + str(KFOLD_CNT)]['val_idx']
 
 
-        model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-        model.eval()
-        model.load_state_dict(torch.load(WEIGHTPATH))
-        model.to(device)
+    transform = transforms.Compose([transforms.Resize((640, 640)),
+                                    transforms.ToTensor()])
 
-        feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model, depth=loadDetph+1)
-        feature_val_data, feature_val_label, val_keyLabel = load_feature(ML_val_loader, model, depth=loadDetph+1)
-        total_keyLabel += val_keyLabel
+    # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
+    dataset = Dataload
 
-        predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
+    train = Subset(dataset, train_idx)
+    val = Subset(dataset, val_idx)
 
-        ML_roc_auc, _ = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(KFOLD_CNT))
-        ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, _ = MyEstimator.confusion(feature_val_label, predict, val_keyLabel, CLASSNANE, logPath+"\\img", mode ='ML_' + str(KFOLD_CNT))
+    ML_train_loader = DataLoader(train, shuffle = np.True_)
+    ML_val_loader = DataLoader(val, shuffle = True)
 
-        ML_total_true += feature_val_label.tolist()
-        ML_total_pred += predict.tolist()
-        ML_total_pred_score += predict_Probability.tolist()
 
-        if ML_roc_auc == -1:
-            print("=================================================================================")
-            print("KFOLD_CNT : {} , Accuracy : {:.2} ".format(KFOLD_CNT, ML_Accuracy))
-            print("Specificity : {:.2} , Sensitivity : {:.2}".format(ML_Specificity, ML_Sensitivity))
-        else:
-            print("=================================================================================")
-            print("KFOLD_CNT : {} , Accuracy : {:.2} , AUC : [{:.2}, {:.2}]".format(KFOLD_CNT, ML_Accuracy, ML_roc_auc[0], ML_roc_auc[1]))
-            print("Specificity : {:.2} , Sensitivity : {:.2}".format(ML_Specificity, ML_Sensitivity))
-        # print("=================================================================================")
-        print("True : 1 but 0 :")
-        print(error_list['1_to_0'])
-        print("True : 0 but 1 :")
-        print(error_list['0_to_1'])
+    model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE)).to(device)
 
-    ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, _ = MyEstimator.confusion(ML_total_true, ML_total_pred, total_keyLabel, CLASSNANE, logPath+"\\img", mode = 'Kfold_ML_ALL')
-    ML_roc_auc,_ = MyEstimator.compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath+"\\img", mode = 'Kfold_ML_ALL')
-    print("=================================================================================")
-    print("*********************************************************************************")
-    print("Load Detphs : {} , Accuracy : {:.2} , AUC : [{:.2}, {:.2}]".format(loadDetph+1, ML_Accuracy, ML_roc_auc[0], ML_roc_auc[1]))
-    print("Specificity : {:.2} , Sensitivity : {:.2}".format(ML_Specificity, ML_Sensitivity))
+    model.eval()
+    model.load_state_dict(torch.load(WEIGHTPATH))
+    model.to(device)
 
+    feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model)
+    feature_val_data, feature_val_label, val_keyLabel = load_feature(ML_val_loader, model)
+    total_keyLabel += val_keyLabel
+
+    predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
+
+    ML_roc_auc, _ = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(KFOLD_CNT))
+    ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, _ = MyEstimator.confusion(feature_val_label, predict, val_keyLabel, CLASSNANE, logPath+"\\img", mode ='ML_' + str(KFOLD_CNT))
+
+    ML_total_true += feature_val_label.tolist()
+    ML_total_pred += predict.tolist()
+    ML_total_pred_score += predict_Probability.tolist()
+
+    if ML_roc_auc == -1:
+        print("=================================================================================")
+        print("KFOLD_CNT : {} , Accuracy : {:.2} ".format(KFOLD_CNT, ML_Accuracy))
+        print("Specificity : {:.2} , Sensitivity : {:.2}".format(ML_Specificity, ML_Sensitivity))
+    else:
+        print("=================================================================================")
+        print("KFOLD_CNT : {} , Accuracy : {:.2} , AUC : [{:.2}, {:.2}]".format(KFOLD_CNT, ML_Accuracy, ML_roc_auc[0], ML_roc_auc[1]))
+        print("Specificity : {:.2} , Sensitivity : {:.2}".format(ML_Specificity, ML_Sensitivity))
+    # print("=================================================================================")
     print("True : 1 but 0 :")
     print(error_list['1_to_0'])
     print("True : 0 but 1 :")
     print(error_list['0_to_1'])
-    print("*********************************************************************************")
+
+ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, _ = MyEstimator.confusion(ML_total_true, ML_total_pred, total_keyLabel, CLASSNANE, logPath+"\\img", mode = 'Kfold_ML_ALL')
+ML_roc_auc,_ = MyEstimator.compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath+"\\img", mode = 'Kfold_ML_ALL')
+print("=================================================================================")
+print("*********************************************************************************")
+print("Accuracy : {:.2} , AUC : [{:.2}, {:.2}]".format(ML_Accuracy, ML_roc_auc[0], ML_roc_auc[1]))
+print("Specificity : {:.2} , Sensitivity : {:.2}".format(ML_Specificity, ML_Sensitivity))
+
+print("True : 1 but 0 :")
+print(error_list['1_to_0'])
+print("True : 0 but 1 :")
+print(error_list['0_to_1'])
+print("*********************************************************************************")
 
 
 # %%
