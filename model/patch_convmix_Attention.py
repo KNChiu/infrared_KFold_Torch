@@ -47,7 +47,9 @@ def convmixer_layer(dim, depth, kernel_size):
     return nn.Sequential(   
         *[nn.Sequential( 
             Residual(nn.Sequential(
-                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=dilation_rate+1, groups=dim),
+                nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
+                ChannelAttention(dim),
+                nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
                 ChannelAttention(dim),
                 nn.GELU(),
                 nn.BatchNorm2d(dim),
@@ -98,7 +100,7 @@ class PatchConvMixerAttention(nn.Module):
         # x = self.sa(x) * x
 
         gap = torch.mean(x,1)       # 可視化層
-        featureOut = x.mean([-2, -1])
+        featureOut = x.mean([-2, -1])   
 
         x = self.gap(x)
         x = self.flat(x)
