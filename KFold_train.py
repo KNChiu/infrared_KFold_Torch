@@ -299,13 +299,10 @@ if __name__ == '__main__':
     # EPOCH = 509
     EPOCH = 448
 
-
-
-
     BATCHSIZE = 16
     LR = 0.01
     # LR = 0.0001
-    DRAWIMG = 508
+    DRAWIMG = 0
 
     CATBOOTS_INTER = 1000
 
@@ -346,6 +343,9 @@ if __name__ == '__main__':
         ML_total_pred_score = []
         total_keyLabel = []
         ML_total_keyLabel = []
+
+        CNN_ML_Change = {'CNN_ACC':[], 'ML_ACC':[], 'CNN_AUC':[], 'ML_AUC':[],
+                         'CNN_SEN':[], 'ML_SEN':[], 'CNN_SPE':[], 'ML_SPE':[],}
 
         # KFOLD
         for train_idx, val_idx in kf.split(dataset):
@@ -429,6 +429,16 @@ if __name__ == '__main__':
 
                 if ML_roc_auc != -1:
                     ML_roc_auc = max(ML_roc_auc.values())
+                
+                CNN_ML_Change['CNN_ACC'].append(Accuracy)
+                CNN_ML_Change['ML_ACC'].append(ML_Accuracy)
+                CNN_ML_Change['CNN_AUC'].append(roc_auc)
+                CNN_ML_Change['ML_AUC'].append(ML_roc_auc)
+                CNN_ML_Change['CNN_SEN'].append(Sensitivity)
+                CNN_ML_Change['ML_SEN'].append(ML_Sensitivity)
+                CNN_ML_Change['CNN_SPE'].append(Specificity)
+                CNN_ML_Change['ML_SPE'].append(ML_Specificity)
+                
 
                 print("Kfold : {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(Kfold_cnt, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
                 print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
@@ -487,12 +497,16 @@ if __name__ == '__main__':
             if roc_auc != -1:
                 ML_roc_auc = float(max(ML_roc_auc))
 
-            # print("===================================================================================================")
+            print("=================================== CNN -> ML =================================================")
+            for i in range(len(CNN_ML_Change['CNN_ACC'])):
+                print("Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(i, CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
+                print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
+                print("------------------------------------------------------------------------------------------")
             # print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
             # print("Total AUC: ", roc_auc)
             # print("===================================================================================================")
-            print("============================-== KFlod Finish =====================================================")
-            print("Kfold:N= {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            print("=============================== KFlod Finish =====================================================")
+            print("Total Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
             print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
             print("===================================================================================================")
 
