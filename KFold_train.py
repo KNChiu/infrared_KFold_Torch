@@ -58,16 +58,15 @@ def fit_model(model, train_loader, val_loader, classes):
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
     loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 2.5)
 
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
+    cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=WARMUP_ITER//2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
     # scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=0, cycle_mult=2.0, max_lr=LR, min_lr=0, warmup_steps=0, gamma=1.0)
 
+    warm_up_iter = WARMUP_ITER
+    T_max = WARMUP_ITER	# 周期
 
-    # 设置warm up的轮次为100次
-    warm_up_iter = 100
-    T_max = 400	# 周期
-
-    warm_up_with_cosine_lr = lambda epoch: epoch / warm_up_iter if epoch <= warm_up_iter else 0.5 * ( math.cos((epoch - warm_up_iter) /(T_max - warm_up_iter) * math.pi) + 1)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warm_up_with_cosine_lr)
+    # warm_up_with_cosine_lr = lambda epoch: epoch / warm_up_iter if epoch <= warm_up_iter else 0.5 * ( math.cos((epoch - warm_up_iter) /(T_max - warm_up_iter) * math.pi) + 1)
+    warm_up_with_cosine_lr = lambda epoch: epoch / warm_up_iter 
+    warm_up_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warm_up_with_cosine_lr)
 
 
     mini_val_loss = 100
@@ -98,7 +97,11 @@ def fit_model(model, train_loader, val_loader, classes):
             train_y_true += y.tolist()
             train_y_pred += pred.tolist()
 
-        scheduler.step()        # cos退火
+        if epoch+1 < WARMUP_ITER:
+            warm_up_scheduler.step()        # WarmUp
+        else:
+            cos_restart_scheduler.step()    # cos退火
+
         cur_lr = optimizer.param_groups[-1]['lr']  
 
         train_roc_auc, _ = MyEstimator.compute_auc(train_y_true, train_y_pred_score, classes)
@@ -215,6 +218,15 @@ def test_model(model, test_loader, classes):
         return Accuracy, roc_auc, Specificity, Sensitivity, y_true, y_pred, y_pred_score, gap, keyLabel, error_list
 
 def load_feature(dataloader, model):
+    if SAVEBAST: 
+        saveModelpath = logPath + "//" + str(Kfold_cnt) + "_bast.pth"
+    else:
+        saveModelpath = logPath + "//" + str(Kfold_cnt) + "_last.pth"
+
+    model.eval()
+    model.load_state_dict(torch.load(saveModelpath))
+    model.to(device)
+
     feature, label, keyLabel = [], [], []
     for idx, (x, y, key) in enumerate(dataloader):
         keyLabel += key
@@ -273,7 +285,7 @@ if __name__ == '__main__':
     SAVEIDX = True
     WANDBRUN = True
     SAVEBAST = False
-    RUNML = False
+    RUNML = True
     
     
     CLASSNANE = ['Ischemia', 'Infect']
@@ -282,8 +294,11 @@ if __name__ == '__main__':
     KERNELSIZE = 7
 
     KFOLD_N = 10
+    WARMUP_ITER = 100
     # EPOCH = 10
-    EPOCH = 509
+    # EPOCH = 509
+    EPOCH = 448
+
 
 
 
