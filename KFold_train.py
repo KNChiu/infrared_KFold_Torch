@@ -303,7 +303,7 @@ if __name__ == '__main__':
     ISKFOLD = True
     SAVEPTH = True
     SAVEIDX = True
-    WANDBRUN = False
+    WANDBRUN = True
     SAVEBAST = False
     RUNML = True
     
@@ -313,9 +313,11 @@ if __name__ == '__main__':
     CNN_DETPH = 3
     KERNELSIZE = 7
 
-    KFOLD_N = 10
+    
     WARMUP_ITER = 100
+    # KFOLD_N = 2
     # EPOCH = 1
+    KFOLD_N = 10
     EPOCH = 448
 
     BATCHSIZE = 16
@@ -335,6 +337,7 @@ if __name__ == '__main__':
     Dataload = MyDataset(DATAPATH, LOGPATH, 2)
 
 
+
     # 建立 log
     logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
     if not os.path.isdir(logPath):
@@ -349,6 +352,7 @@ if __name__ == '__main__':
                                     transforms.ToTensor()])
 
     if ISKFOLD:
+        logger.info("================================= CNN -> ML ============================================")
         # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
         dataset  = Dataload
         kf = KFold(n_splits = KFOLD_N, shuffle = True)
@@ -365,8 +369,8 @@ if __name__ == '__main__':
         total_keyLabel = []
         ML_total_keyLabel = []
 
-        CNN_ML_Change = {'CNN_ACC':[], 'ML_ACC':[], 'CNN_AUC':[], 'ML_AUC':[],
-                         'CNN_SEN':[], 'ML_SEN':[], 'CNN_SPE':[], 'ML_SPE':[],}
+        # CNN_ML_Change = {'CNN_ACC':[], 'ML_ACC':[], 'CNN_AUC':[], 'ML_AUC':[],
+        #                  'CNN_SEN':[], 'ML_SEN':[], 'CNN_SPE':[], 'ML_SPE':[],}
 
         # KFOLD
         for train_idx, val_idx in kf.split(dataset):
@@ -451,19 +455,19 @@ if __name__ == '__main__':
                 if ML_roc_auc != -1:
                     ML_roc_auc = max(ML_roc_auc.values())
                 
-                CNN_ML_Change['CNN_ACC'].append(Accuracy)
-                CNN_ML_Change['ML_ACC'].append(ML_Accuracy)
-                CNN_ML_Change['CNN_AUC'].append(roc_auc)
-                CNN_ML_Change['ML_AUC'].append(ML_roc_auc)
-                CNN_ML_Change['CNN_SEN'].append(Sensitivity)
-                CNN_ML_Change['ML_SEN'].append(ML_Sensitivity)
-                CNN_ML_Change['CNN_SPE'].append(Specificity)
-                CNN_ML_Change['ML_SPE'].append(ML_Specificity)
+                # CNN_ML_Change['CNN_ACC'].append(Accuracy)
+                # CNN_ML_Change['ML_ACC'].append(ML_Accuracy)
+                # CNN_ML_Change['CNN_AUC'].append(roc_auc)
+                # CNN_ML_Change['ML_AUC'].append(ML_roc_auc)
+                # CNN_ML_Change['CNN_SEN'].append(Sensitivity)
+                # CNN_ML_Change['ML_SEN'].append(ML_Sensitivity)
+                # CNN_ML_Change['CNN_SPE'].append(Specificity)
+                # CNN_ML_Change['ML_SPE'].append(ML_Specificity)
                 
-
-                print("Kfold : {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(Kfold_cnt, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-                print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
-                print("===================================================================================================")
+                logger.info("Kfold = [{}]\t".format(Kfold_cnt))
+                logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+                logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
+                logger.info("-------------------------------------------------------------------------------------")
 
                 if WANDBRUN:
                     wb_run.log({
@@ -486,14 +490,13 @@ if __name__ == '__main__':
         roc_auc, compute_img = MyEstimator.compute_auc(total_true, total_pred_score, CLASSNANE, logPath, mode = 'Kfold_CNN')
         
         # print("==================================== CNN Training=================================================")
-        # print("True : 1 but 0 :")
-        # print(error_list['1_to_0'])
+        # print("True : 1 but 0 :")        # print(error_list['1_to_0'])
         # print("True : 0 but 1 :")
         # print(error_list['0_to_1'])
 
 
         if roc_auc != -1:
-                roc_auc = float(max(roc_auc))
+                roc_auc = float(max(roc_auc.values()))
         if WANDBRUN:
             wb_run.log({
                         "KFold_CNN_ML Accuracy" : Accuracy,
@@ -515,35 +518,25 @@ if __name__ == '__main__':
             # print("True : 0 but 1 :")
             # print(error_list['0_to_1'])
 
-            if roc_auc != -1:
-                ML_roc_auc = float(max(ML_roc_auc))
+            if ML_roc_auc != -1:
+                ML_roc_auc = float(max(ML_roc_auc.values()))
 
+            
 
-            # print("=================================== CNN -> ML =================================================")
-            logger.info("================================= CNN -> ML ============================================")
-            for i in range(len(CNN_ML_Change['CNN_ACC'])):
-                # print("Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(i, CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
-                # print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
-                # print("------------------------------------------------------------------------------------------")
-                logger.info("Kfold = [{}]\t".format(i))
-                logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
-                logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
-                logger.info("-------------------------------------------------------------------------------------")
-            # print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
-            # print("Total AUC: ", roc_auc)
-            # print("===================================================================================================")
-            # print("=============================== KFlod Finish =====================================================")
-            # print("Total Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-            # print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
-            # print("===================================================================================================")
+            # logger.info("================================= CNN -> ML ============================================")
+            # for i in range(len(CNN_ML_Change['CNN_ACC'])):
+                
+            #     logger.info("Kfold = [{}]\t".format(i))
+            #     logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
+            #     logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
+            #     logger.info("-------------------------------------------------------------------------------------")
+            
             logger.info("=============================== KFlod Finish =====================================================")
             logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
             logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
             logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
-            logger.info("===================================================================================================")
-
-            # if roc_auc != -1:
-            #     roc_auc = float(max(roc_auc))
+            logger.info("========================================= Model ===================================================")
+            logger.info(model)
 
             if WANDBRUN:
                 wb_run.log({
