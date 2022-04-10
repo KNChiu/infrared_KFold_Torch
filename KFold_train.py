@@ -38,6 +38,7 @@ from model.load_dataset import MyDataset
 from model.assessment_tool import MyEstimator
 
 import math
+import logging
 
 SEED = 42
 if SEED:
@@ -279,11 +280,30 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations):
     predict_Probability = cbc.predict(val_data, prediction_type='Probability')
     return predict, predict_Probability
 
+def get_logger(filename, verbosity=1, name=None):
+    level_dict = {0: logging.DEBUG, 1: logging.INFO, 2: logging.WARNING}
+    formatter = logging.Formatter(
+        "[%(asctime)s][line:%(lineno)d][%(levelname)s] %(message)s"
+    )
+    logger = logging.getLogger(name)
+    logger.setLevel(level_dict[verbosity])
+ 
+    fh = logging.FileHandler(filename, "w")
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+ 
+    sh = logging.StreamHandler()
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+ 
+    return logger
+
+
 if __name__ == '__main__':
     ISKFOLD = True
     SAVEPTH = True
     SAVEIDX = True
-    WANDBRUN = True
+    WANDBRUN = False
     SAVEBAST = False
     RUNML = True
     
@@ -295,8 +315,7 @@ if __name__ == '__main__':
 
     KFOLD_N = 10
     WARMUP_ITER = 100
-    # EPOCH = 10
-    # EPOCH = 509
+    # EPOCH = 1
     EPOCH = 448
 
     BATCHSIZE = 16
@@ -321,6 +340,8 @@ if __name__ == '__main__':
     if not os.path.isdir(logPath):
         os.mkdir(logPath)
         os.mkdir(logPath+'//img//')
+
+    logger = get_logger(logPath + '//training.log')
     
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -497,18 +518,29 @@ if __name__ == '__main__':
             if roc_auc != -1:
                 ML_roc_auc = float(max(ML_roc_auc))
 
-            print("=================================== CNN -> ML =================================================")
+
+            # print("=================================== CNN -> ML =================================================")
+            logger.info("================================= CNN -> ML ============================================")
             for i in range(len(CNN_ML_Change['CNN_ACC'])):
-                print("Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(i, CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
-                print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
-                print("------------------------------------------------------------------------------------------")
+                # print("Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(i, CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
+                # print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
+                # print("------------------------------------------------------------------------------------------")
+                logger.info("Kfold = [{}]\t".format(i))
+                logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
+                logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
+                logger.info("-------------------------------------------------------------------------------------")
             # print('Kfold:N= : {} ,Total = Accuracy : {:.3} , Specificity : {:.2} , Sensitivity : {:.2}'.format(KFOLD_N, Accuracy, Specificity, Sensitivity))
             # print("Total AUC: ", roc_auc)
             # print("===================================================================================================")
-            print("=============================== KFlod Finish =====================================================")
-            print("Total Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-            print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
-            print("===================================================================================================")
+            # print("=============================== KFlod Finish =====================================================")
+            # print("Total Kfold = {} , Accuracy : {:.2} => {:.2} , AUC : {:.2} => {:.2}".format(KFOLD_N, Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            # print("Specificity : {:.2} => {:.2} , Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
+            # print("===================================================================================================")
+            logger.info("=============================== KFlod Finish =====================================================")
+            logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
+            logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
+            logger.info("===================================================================================================")
 
             # if roc_auc != -1:
             #     roc_auc = float(max(roc_auc))
