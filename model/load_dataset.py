@@ -6,17 +6,6 @@ import os
 import numpy as np
 import pickle
 
-
-class LoadDataset(Dataset):
-    def __init__(self, path_fold:str,mutPath:str,cpu_count:int,transform=None):
-        self.path_fold = path_fold
-        self.mutPath = mutPath
-        self.cpu_count = cpu_count
-        self.transform = transform
-        self.Data_all = self.load_mut(self.path_fold,self.mutPath,self.cpu_count)
-
-    
-
 class MyDataset(Dataset):
     def __init__(self, path_fold:str,mutPath:str,cpu_count:int,transform=None):
         print("開始讀檔")
@@ -54,8 +43,8 @@ class MyDataset(Dataset):
             self.label.append(label)
             self.key.append(key)
         
-        self.data = torch.Tensor(self.data).permute(0,3,1,2)
-        self.label = torch.LongTensor(self.label)
+        self.data = torch.Tensor(np.array(self.data)).permute(0,3,1,2)
+        self.label = torch.LongTensor(np.array(self.label))
         self.key = np.array(self.key)
     
     def loadimg(self, job_path):
@@ -66,10 +55,21 @@ class MyDataset(Dataset):
 
     def load_mut(self, path_fold:str,mutPath:str,cpu_count:int) -> dict:
         if os.path.isfile(mutPath + '\load_mut.json'):
-            print("使用暫存檔讀資料")
-            with open(mutPath + '\load_mut.json', 'rb') as fp:
-                Data_all = pickle.load(fp)
-            return Data_all
+            print("使用暫存檔資料")
+            try:
+                with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
+                    with open(mutPath + '\load_mut.json', 'rb') as fp:
+                        Data_all = pickle.load(fp)
+                    return Data_all
+            except:
+                print("\r 多進程失敗使用單進程讀暫存檔資料")
+                with open(mutPath + '\load_mut.json', 'rb') as fp:
+                    Data_all = pickle.load(fp)
+                return Data_all
+
+            # with open(mutPath + '\load_mut.json', 'rb') as fp:
+            #     Data_all = pickle.load(fp)
+            # return Data_all
         else:
             print("站存檔不存在，重新創建")
             job_path = []
