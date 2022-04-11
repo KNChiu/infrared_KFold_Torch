@@ -318,10 +318,11 @@ if __name__ == '__main__':
     TRAINMODE = 2
     
     WARMUP_ITER = 100
-    KFOLD_N = 2
-    EPOCH = 1
-    # KFOLD_N = 10
-    # EPOCH = 448
+
+    # KFOLD_N = 2
+    # EPOCH = 1
+    KFOLD_N = 10
+    EPOCH = 448
 
     BATCHSIZE = 32
     LR = 0.01
@@ -356,7 +357,7 @@ if __name__ == '__main__':
 
 
         if ISKFOLD:
-            logger.info("================================= CNN -> ML ============================================")
+            logger.info("================================= CNN -> ML [{}]============================================".format(train_mode)))
             # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
             dataset  = Dataload
             kf = KFold(n_splits = KFOLD_N, shuffle = True)
@@ -397,9 +398,13 @@ if __name__ == '__main__':
                 # 重組 kfold 數據集
                 train = Subset(dataset, train_idx)
                 val = Subset(dataset, val_idx)
+
+                train_loader = DataLoader(train, shuffle = np.True_, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
+                val_loader = DataLoader(val, shuffle = True, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
+
                 
-                train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)    # 使用客製化加速載入訓練集
-                val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)
+                # train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)    # 使用客製化加速載入訓練集
+                # val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)
 
                 # train_loader = CudaDataLoader(train_loader, device)   # 放入vram加速
                 # val_loader = CudaDataLoader(val_loader, device)
@@ -444,8 +449,8 @@ if __name__ == '__main__':
                     # 強分類器
                     # 提取特徵圖
                     print("================================= Catboots Training ===============================================")
-                    ML_train_loader = DataLoader(train, shuffle = np.True_, num_workers = 1, persistent_workers = False)
-                    ML_val_loader = DataLoader(val, shuffle = True, num_workers = 1, persistent_workers = False)
+                    ML_train_loader = DataLoader(train, shuffle = np.True_, num_workers = 1, persistent_workers = True)
+                    ML_val_loader = DataLoader(val, shuffle = True, num_workers = 1, persistent_workers = True)
 
                     feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model)
                     feature_val_data, feature_val_label, ML_val_keyLabel = load_feature(ML_val_loader, model)
