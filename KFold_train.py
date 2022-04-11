@@ -34,7 +34,7 @@ import time
 
 import catboost as cb
 
-from model.load_dataset import MyDataset
+from model.load_dataset import MyDataset, MultiEpochsDataLoader, CudaDataLoader
 from model.assessment_tool import MyEstimator
 
 import math
@@ -78,6 +78,7 @@ def fit_model(model, train_loader, val_loader, classes):
         train_y_true = []
         train_y_pred = []
         for idx, (x, y, _) in enumerate(train_loader):
+
             model.train()
             optimizer.zero_grad()
 
@@ -178,7 +179,6 @@ def fit_model(model, train_loader, val_loader, classes):
                 torch.save(model.state_dict(), saveModelpath)
 
         print('  => Epoch : {}  Training Loss : {:.4e}  Val Loss : {:.4e}  Val ACC : {:.2}  Val AUC : {:.2}'.format(epoch + 1, training_loss, val_loss, Accuracy, roc_auc))
-
     return training_loss, val_loss 
 
 def test_model(model, test_loader, classes):
@@ -207,7 +207,7 @@ def test_model(model, test_loader, classes):
 
             # 計算是否正確
             pred = torch.max(pred.data, 1)[1] 
-            # correct += (pred == y.to(device)).sum()
+            # correct += (pred == y)).sum()
 
             y_true += y.tolist()
             y_pred += pred.tolist()
@@ -303,63 +303,65 @@ if __name__ == '__main__':
     ISKFOLD = True
     SAVEPTH = True
     SAVEIDX = True
-    WANDBRUN = True
-    SAVEBAST = False
     RUNML = True
+    SAVEBAST = False
+    # WANDBRUN = True
+    WANDBRUN = False
+
+    
     
     
     CLASSNANE = ['Ischemia', 'Infect']
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
     CNN_DETPH = 3
     KERNELSIZE = 7
-    TRAINMODE = 0
-
+    TRAINMODE = 2
     
     WARMUP_ITER = 100
-    # KFOLD_N = 2
-    # EPOCH = 1
-    KFOLD_N = 10
-    EPOCH = 448
+    KFOLD_N = 2
+    EPOCH = 1
+    # KFOLD_N = 10
+    # EPOCH = 448
 
-    BATCHSIZE = 16
+    BATCHSIZE = 32
     LR = 0.01
     # LR = 0.0001
-    DRAWIMG = 0
+    DRAWIMG = 50
 
     CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
     DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_98\\'
-    # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
-    # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
+    WANDBDIR = r'C:\Data\surgical_temperature\trainingLogs\\'
+    # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3
 
 
     MyEstimator = MyEstimator()
     Dataload = MyDataset(DATAPATH, LOGPATH, 2)
 
-    for train_mode in range(TRAINMODE+1):
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
+    transform = transforms.Compose([transforms.Resize((640, 640)),
+                                    transforms.ToTensor()])
+
+    for train_mode in range(TRAINMODE+1):
         # 建立 log
         logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
         if not os.path.isdir(logPath):
             os.mkdir(logPath)
             os.mkdir(logPath+'//img//')
 
-        logger = get_logger(logPath + '//training.log')
+        logger = get_logger(logPath + '//training.log', name='train_mode_'+str(train_mode))
         
-        device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-        transform = transforms.Compose([transforms.Resize((640, 640)),
-                                        transforms.ToTensor()])
 
         if ISKFOLD:
-            logger.info("================================= model mode : [{}] ============================================".format(train_mode))
+            logger.info("================================= CNN -> ML ============================================")
             # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
             dataset  = Dataload
             kf = KFold(n_splits = KFOLD_N, shuffle = True)
             Kfold_cnt = 0
-            # acc_array = []
-            # totlal_acc = 0
+
             total_true = []
             total_pred = []
             total_pred_score = []
@@ -370,15 +372,12 @@ if __name__ == '__main__':
             total_keyLabel = []
             ML_total_keyLabel = []
 
-            # CNN_ML_Change = {'CNN_ACC':[], 'ML_ACC':[], 'CNN_AUC':[], 'ML_AUC':[],
-            #                  'CNN_SEN':[], 'ML_SEN':[], 'CNN_SPE':[], 'ML_SPE':[],}
-        
             # KFOLD
             for train_idx, val_idx in kf.split(dataset):
                 Kfold_cnt += 1
 
                 if WANDBRUN:
-                    wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str("kfold_N="+str(Kfold_cnt)))
+                    wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str("kfold_N="+str(Kfold_cnt)), dir = WANDBDIR)
                 
                 if SAVEIDX:
                     with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
@@ -399,12 +398,16 @@ if __name__ == '__main__':
                 train = Subset(dataset, train_idx)
                 val = Subset(dataset, val_idx)
                 
-                train_loader = DataLoader(train, batch_size = BATCHSIZE, shuffle = True)
-                val_loader = DataLoader(val, batch_size = BATCHSIZE, shuffle = True)
+                train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)    # 使用客製化加速載入訓練集
+                val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)
+
+                # train_loader = CudaDataLoader(train_loader, device)   # 放入vram加速
+                # val_loader = CudaDataLoader(val_loader, device)
+
 
                 # 匯入模型
                 model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE), train_mode = train_mode).to(device)
-
+                
                 # Train
                 fit_model(model, train_loader, val_loader, CLASSNANE)
 
@@ -441,8 +444,8 @@ if __name__ == '__main__':
                     # 強分類器
                     # 提取特徵圖
                     print("================================= Catboots Training ===============================================")
-                    ML_train_loader = DataLoader(train, shuffle = np.True_)
-                    ML_val_loader = DataLoader(val, shuffle = True)
+                    ML_train_loader = DataLoader(train, shuffle = np.True_, num_workers = 1, persistent_workers = False)
+                    ML_val_loader = DataLoader(val, shuffle = True, num_workers = 1, persistent_workers = False)
 
                     feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model)
                     feature_val_data, feature_val_label, ML_val_keyLabel = load_feature(ML_val_loader, model)
@@ -455,15 +458,6 @@ if __name__ == '__main__':
 
                     if ML_roc_auc != -1:
                         ML_roc_auc = max(ML_roc_auc.values())
-                    
-                    # CNN_ML_Change['CNN_ACC'].append(Accuracy)
-                    # CNN_ML_Change['ML_ACC'].append(ML_Accuracy)
-                    # CNN_ML_Change['CNN_AUC'].append(roc_auc)
-                    # CNN_ML_Change['ML_AUC'].append(ML_roc_auc)
-                    # CNN_ML_Change['CNN_SEN'].append(Sensitivity)
-                    # CNN_ML_Change['ML_SEN'].append(ML_Sensitivity)
-                    # CNN_ML_Change['CNN_SPE'].append(Specificity)
-                    # CNN_ML_Change['ML_SPE'].append(ML_Specificity)
                     
                     logger.info("Kfold = [{}]\t".format(Kfold_cnt))
                     logger.info("Accuracy    : {:.2} => {:.2}\t AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
@@ -523,15 +517,6 @@ if __name__ == '__main__':
                     ML_roc_auc = float(max(ML_roc_auc.values()))
 
                 
-
-                # logger.info("================================= CNN -> ML ============================================")
-                # for i in range(len(CNN_ML_Change['CNN_ACC'])):
-                    
-                #     logger.info("Kfold = [{}]\t".format(i))
-                #     logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(CNN_ML_Change['CNN_ACC'][i], CNN_ML_Change['ML_ACC'][i], CNN_ML_Change['CNN_AUC'][i], CNN_ML_Change['ML_ACC'][i]))
-                #     logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(CNN_ML_Change["CNN_SPE"][i], CNN_ML_Change['ML_SPE'][i], CNN_ML_Change['CNN_SEN'][i], CNN_ML_Change['ML_SEN'][i]))
-                #     logger.info("-------------------------------------------------------------------------------------")
-                
                 logger.info("=============================== KFlod Finish =====================================================")
                 logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
                 logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
@@ -548,6 +533,9 @@ if __name__ == '__main__':
                                 "KFold_CNN_ML compute": [wandb.Image(compute_img)],
                                 "KFold_CNN_ML confusion": [wandb.Image(confusion_img)]
                             })
+
+            torch.cuda.empty_cache()    # 釋放記憶體
+            logging.shutdown()          # 關閉logger
 
         if WANDBRUN:
             wb_run.finish()
