@@ -312,7 +312,7 @@ if __name__ == '__main__':
     # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
     CNN_DETPH = 3
     KERNELSIZE = 7
-    TRAINMODE = 1
+    TRAINMODE = 0
 
     
     WARMUP_ITER = 100
@@ -329,7 +329,7 @@ if __name__ == '__main__':
     CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
-    DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_96\\'
+    DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_98\\'
     # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3_kfold'
     # DATAPATH = r'C:\Data\胸大肌\data\3classes\CC\train'
 
@@ -466,7 +466,7 @@ if __name__ == '__main__':
                     # CNN_ML_Change['ML_SPE'].append(ML_Specificity)
                     
                     logger.info("Kfold = [{}]\t".format(Kfold_cnt))
-                    logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+                    logger.info("Accuracy    : {:.2} => {:.2}\t AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
                     logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
                     logger.info("-------------------------------------------------------------------------------------")
 
