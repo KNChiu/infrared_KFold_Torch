@@ -57,7 +57,7 @@ def fit_model(model, train_loader, val_loader, classes):
     # optimizer = torch.optim.Adam(model.parameters(), lr = LR)
     optimizer = torch.optim.SGD(model.parameters(), lr = LR)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
-    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 2.5)
+    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 2)
 
     cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=WARMUP_ITER//2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
     # scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=0, cycle_mult=2.0, max_lr=LR, min_lr=0, warmup_steps=0, gamma=1.0)
@@ -309,7 +309,7 @@ if __name__ == '__main__':
     # WANDBRUN = True
     WANDBRUN = False
 
-    CNN_DETPH = 3
+    CNN_DETPH = 4
     KERNELSIZE = 7
     TRAINMODE = 2
     
@@ -320,6 +320,7 @@ if __name__ == '__main__':
     KFOLD_N = 10
     EPOCH = 448
     TRYMODEL = True
+    VRAM_FAST = False
 
     BATCHSIZE = 32
     LR = 0.01
@@ -342,6 +343,7 @@ if __name__ == '__main__':
                                     transforms.ToTensor()])
 
     for train_mode in range(TRAINMODE+1):
+        start = time.time()
         # 建立 log
         logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M%S", time.localtime()))
         if not os.path.isdir(logPath):
@@ -393,15 +395,16 @@ if __name__ == '__main__':
             train = Subset(dataset, train_idx)
             val = Subset(dataset, val_idx)
 
-            train_loader = DataLoader(train, shuffle = np.True_, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
-            val_loader = DataLoader(val, shuffle = True, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
+            if VRAM_FAST:
+                train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=True)    # 使用客製化加速載入訓練集
+                val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=True)
 
-            
-            # train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)    # 使用客製化加速載入訓練集
-            # val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)
+                train_loader = CudaDataLoader(train_loader, device)   # 放入vram加速
+                val_loader = CudaDataLoader(val_loader, device)
 
-            # train_loader = CudaDataLoader(train_loader, device)   # 放入vram加速
-            # val_loader = CudaDataLoader(val_loader, device)
+            else:
+                train_loader = DataLoader(train, shuffle = np.True_, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
+                val_loader = DataLoader(val, shuffle = True, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
 
 
             # 匯入模型
@@ -522,7 +525,7 @@ if __name__ == '__main__':
             logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
             logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
             logger.info("===================================================================================================")
-            
+            logger.info("KFlod time : " + str(time.time() - start) + " s")
             logger.info("True : 1 but 0 :")
             logger.info(error_list['1_to_0'])
             logger.info("True : 0 but 1 :")
@@ -542,6 +545,7 @@ if __name__ == '__main__':
 
         torch.cuda.empty_cache()    # 釋放記憶體
         logging.shutdown()          # 關閉logger
+
 
         if WANDBRUN:
             wb_run.finish()
