@@ -48,16 +48,17 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
         return nn.Sequential(   
             *[nn.Sequential( 
                 Residual(nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
-                    ChannelAttention(dim),
-                    nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
-                    ChannelAttention(dim),
+                    nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=3, groups=dim),
+                    # ChannelAttention(dim),
+                    # nn.GELU(),
+                    nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=3, groups=dim),
+                    # ChannelAttention(dim),
                     nn.GELU(),
                     nn.BatchNorm2d(dim),
                 )), 
                 Residual(nn.Sequential(
                     nn.Conv2d(dim, dim, kernel_size=1),
-                    ChannelAttention(dim),
+                    # ChannelAttention(dim),
                     nn.GELU(),
                     nn.BatchNorm2d(dim)
                 )), 
@@ -67,36 +68,18 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
         return nn.Sequential(   
             *[nn.Sequential( 
                 Residual(nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
+                    nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=3, groups=dim),
+                    # ChannelAttention(dim),
+                    # nn.GELU(),
+                    nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=3, groups=dim),
+                    # ChannelAttention(dim),
                     nn.GELU(),
-                    nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
-                    nn.GELU(),
-                    ChannelAttention(dim),
                     nn.BatchNorm2d(dim),
                 )), 
                 Residual(nn.Sequential(
                     nn.Conv2d(dim, dim, kernel_size=1),
+                    # ChannelAttention(dim),
                     nn.GELU(),
-                    ChannelAttention(dim),
-                    nn.BatchNorm2d(dim)
-                )), 
-            )for dilation_rate in range(depth)], 
-        )
-    elif train_mode == 2:
-        return nn.Sequential(   
-            *[nn.Sequential( 
-                Residual(nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
-                    nn.GELU(),
-                    nn.Conv2d(dim, dim, kernel_size=1, padding='same', dilation=2, groups=dim),
-                    nn.GELU(),
-                    ChannelAttention(dim),
-                    nn.BatchNorm2d(dim),
-                )), 
-                Residual(nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=1),
-                    nn.GELU(),
-                    ChannelAttention(dim),
                     nn.BatchNorm2d(dim)
                 )), 
             )for dilation_rate in range(depth)], 
