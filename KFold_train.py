@@ -283,7 +283,7 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations):
 def get_logger(filename, verbosity=1, name=None):
     level_dict = {0: logging.DEBUG, 1: logging.INFO, 2: logging.WARNING}
     formatter = logging.Formatter(
-        "[%(asctime)s][line:%(lineno)d][%(levelname)s] %(message)s"
+        "[%(asctime)s][%(name)s] %(message)s"
     )
     logger = logging.getLogger(name)
     logger.setLevel(level_dict[verbosity])
@@ -300,7 +300,8 @@ def get_logger(filename, verbosity=1, name=None):
 
 
 if __name__ == '__main__':
-    ISKFOLD = True
+    CLASSNANE = ['Ischemia', 'Infect']
+
     SAVEPTH = True
     SAVEIDX = True
     RUNML = True
@@ -308,11 +309,6 @@ if __name__ == '__main__':
     # WANDBRUN = True
     WANDBRUN = False
 
-    
-    
-    
-    CLASSNANE = ['Ischemia', 'Infect']
-    # CLASSNANE = ['Ischemia', 'Acutephase', 'Recoveryperiod']
     CNN_DETPH = 3
     KERNELSIZE = 7
     TRAINMODE = 2
@@ -323,18 +319,18 @@ if __name__ == '__main__':
     # EPOCH = 1
     KFOLD_N = 10
     EPOCH = 448
+    TRYMODEL = True
 
     BATCHSIZE = 32
     LR = 0.01
     # LR = 0.0001
-    DRAWIMG = 50
+    DRAWIMG = 0
 
     CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
     DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_98\\'
     WANDBDIR = r'C:\Data\surgical_temperature\trainingLogs\\'
-    # DATAPATH = r'C:\Data\外科溫度\裁切\已分訓練集\cut_3
 
 
     MyEstimator = MyEstimator()
@@ -347,200 +343,205 @@ if __name__ == '__main__':
 
     for train_mode in range(TRAINMODE+1):
         # 建立 log
-        logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M", time.localtime()))
+        logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M%S", time.localtime()))
         if not os.path.isdir(logPath):
             os.mkdir(logPath)
             os.mkdir(logPath+'//img//')
 
-        logger = get_logger(logPath + '//training.log', name='train_mode_'+str(train_mode))
+        logger = get_logger(logPath + '//training.log', name='train_mode_'+str(train_mode))     # 建立 logger
         
 
+        logger.info("================================= CNN -> ML [{}]============================================".format(train_mode))
+        # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
+        dataset  = Dataload
+        kf = KFold(n_splits = KFOLD_N, shuffle = True)
+        Kfold_cnt = 0
 
-        if ISKFOLD:
-            logger.info("================================= CNN -> ML [{}]============================================".format(train_mode)))
-            # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
-            dataset  = Dataload
-            kf = KFold(n_splits = KFOLD_N, shuffle = True)
-            Kfold_cnt = 0
+        total_true = []
+        total_pred = []
+        total_pred_score = []
 
-            total_true = []
-            total_pred = []
-            total_pred_score = []
+        ML_total_true = []
+        ML_total_pred = []
+        ML_total_pred_score = []
+        total_keyLabel = []
+        ML_total_keyLabel = []
 
-            ML_total_true = []
-            ML_total_pred = []
-            ML_total_pred_score = []
-            total_keyLabel = []
-            ML_total_keyLabel = []
+        # KFOLD
+        for train_idx, val_idx in kf.split(dataset):
+            Kfold_cnt += 1
 
-            # KFOLD
-            for train_idx, val_idx in kf.split(dataset):
-                Kfold_cnt += 1
-
-                if WANDBRUN:
-                    wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str("kfold_N="+str(Kfold_cnt)), dir = WANDBDIR)
-                
-                if SAVEIDX:
-                    with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
-                        json_file.seek(0)  
-                        if json_file.read() =='':  
-                            data = {}
-                        else:
-                            json_file.seek(0)
-                            data = json.load(json_file)
-
-                        data['Kfold_cnt' + str(Kfold_cnt)] = {'train_idx':train_idx.tolist(), 'val_idx':val_idx.tolist()}
-
+            if WANDBRUN:
+                wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str("kfold_N="+str(Kfold_cnt)), dir = WANDBDIR)
+            
+            if SAVEIDX:
+                with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
+                    json_file.seek(0)  
+                    if json_file.read() =='':  
+                        data = {}
+                    else:
                         json_file.seek(0)
-                        json_file.truncate()
-                        json.dump(data, json_file, indent=2, ensure_ascii=False)
-                
-                # 重組 kfold 數據集
-                train = Subset(dataset, train_idx)
-                val = Subset(dataset, val_idx)
+                        data = json.load(json_file)
 
-                train_loader = DataLoader(train, shuffle = np.True_, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
-                val_loader = DataLoader(val, shuffle = True, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
+                    data['Kfold_cnt' + str(Kfold_cnt)] = {'train_idx':train_idx.tolist(), 'val_idx':val_idx.tolist()}
 
-                
-                # train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)    # 使用客製化加速載入訓練集
-                # val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)
-
-                # train_loader = CudaDataLoader(train_loader, device)   # 放入vram加速
-                # val_loader = CudaDataLoader(val_loader, device)
-
-
-                # 匯入模型
-                model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE), train_mode = train_mode).to(device)
-                
-                # Train
-                fit_model(model, train_loader, val_loader, CLASSNANE)
-
-                # Test
-                Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap, val_keyLabel, error_list = test_model(model, val_loader, CLASSNANE)
-
-                total_true += kfold_true
-                total_pred += kfold_pred
-                total_pred_score += kfold_pred_score
-                total_keyLabel += val_keyLabel
-
-                if roc_auc != -1:
-                    roc_auc = max(roc_auc.values())
-
-                print("==================================== CNN Training=================================================")
-                print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
-                # print("True : 1 but 0 :")
-                # print(error_list['1_to_0'])
-                # print("True : 0 but 1 :")
-                # print(error_list['0_to_1'])
-                print("===================================================================================================")
+                    json_file.seek(0)
+                    json_file.truncate()
+                    json.dump(data, json_file, indent=2, ensure_ascii=False)
             
+            # 重組 kfold 數據集
+            train = Subset(dataset, train_idx)
+            val = Subset(dataset, val_idx)
 
-                if WANDBRUN:
-                    wb_run.log({
-                                "CNN Accuracy" : Accuracy,
-                                "CNN AUC" : roc_auc,
-                                "CNN Specificity" : Specificity,
-                                "CNN Sensitivity" : Sensitivity
-                                })
+            train_loader = DataLoader(train, shuffle = np.True_, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
+            val_loader = DataLoader(val, shuffle = True, batch_size=BATCHSIZE, num_workers = 1, persistent_workers = True)
 
-    # ML ===============================================================
-                if RUNML:
-                    # 強分類器
-                    # 提取特徵圖
-                    print("================================= Catboots Training ===============================================")
-                    ML_train_loader = DataLoader(train, shuffle = np.True_, num_workers = 1, persistent_workers = True)
-                    ML_val_loader = DataLoader(val, shuffle = True, num_workers = 1, persistent_workers = True)
-
-                    feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model)
-                    feature_val_data, feature_val_label, ML_val_keyLabel = load_feature(ML_val_loader, model)
-                    ML_total_keyLabel += ML_val_keyLabel
-
-                    predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
-
-                    ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(Kfold_cnt))
-                    ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, ML_val_keyLabel, classes = CLASSNANE, logPath = logPath+"\\img", mode ='ML_' + str(Kfold_cnt))
-
-                    if ML_roc_auc != -1:
-                        ML_roc_auc = max(ML_roc_auc.values())
-                    
-                    logger.info("Kfold = [{}]\t".format(Kfold_cnt))
-                    logger.info("Accuracy    : {:.2} => {:.2}\t AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-                    logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
-                    logger.info("-------------------------------------------------------------------------------------")
-
-                    if WANDBRUN:
-                        wb_run.log({
-                                    "ML Accuracy" : ML_Accuracy,
-                                    "ML AUC" : ML_roc_auc,
-                                    "ML Specificity" : ML_Specificity,
-                                    "ML Sensitivity" : ML_Sensitivity
-                                    })
-
-                    
-                    ML_total_true += feature_val_label.tolist()
-                    ML_total_pred += predict.tolist()
-                    ML_total_pred_score += predict_Probability.tolist()
-                
-
-
-    # Kflod end ================================================
-            # Kfold CNN 結束交叉驗證
-            Accuracy, Specificity, Sensitivity, error_list, confusion_img = MyEstimator.confusion(total_true, total_pred, total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_CNN')
-            roc_auc, compute_img = MyEstimator.compute_auc(total_true, total_pred_score, CLASSNANE, logPath, mode = 'Kfold_CNN')
             
-            # print("==================================== CNN Training=================================================")
-            # print("True : 1 but 0 :")        # print(error_list['1_to_0'])
-            # print("True : 0 but 1 :")
-            # print(error_list['0_to_1'])
+            # train_loader = MultiEpochsDataLoader(train, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)    # 使用客製化加速載入訓練集
+            # val_loader = MultiEpochsDataLoader(val, batch_size=BATCHSIZE, shuffle=True, num_workers=1, pin_memory=False)
 
+            # train_loader = CudaDataLoader(train_loader, device)   # 放入vram加速
+            # val_loader = CudaDataLoader(val_loader, device)
+
+
+            # 匯入模型
+            model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE), train_mode = train_mode).to(device)
+            
+            # Train
+            fit_model(model, train_loader, val_loader, CLASSNANE)
+
+            # Test
+            Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap, val_keyLabel, error_list = test_model(model, val_loader, CLASSNANE)
+
+            total_true += kfold_true
+            total_pred += kfold_pred
+            total_pred_score += kfold_pred_score
+            total_keyLabel += val_keyLabel
 
             if roc_auc != -1:
-                    roc_auc = float(max(roc_auc.values()))
+                roc_auc = max(roc_auc.values())
+
+            print("==================================== CNN Training=================================================")
+            print('Kfold : {} , Accuracy : {:.2e} , Test AUC : {:.2} , Specificity : {:.2} , Sensitivity : {:.2}'.format(Kfold_cnt, Accuracy, roc_auc, Specificity, Sensitivity))
+            # print("True : 1 but 0 :")
+            # print(error_list['1_to_0'])
+            # print("True : 0 but 1 :")
+            # print(error_list['0_to_1'])
+            print("===================================================================================================")
+        
+
             if WANDBRUN:
                 wb_run.log({
-                            "KFold_CNN_ML Accuracy" : Accuracy,
-                            "KFold_CNN_ML AUC" : roc_auc,
-                            "KFold_CNN_ML Specificity" : Specificity.item(),
-                            "KFold_CNN_ML Sensitivity" : Sensitivity.item(),
-                            "KFold_CNN_ML compute": [wandb.Image(compute_img)],
-                            "KFold_CNN_ML confusion": [wandb.Image(confusion_img)]
+                            "CNN Accuracy" : Accuracy,
+                            "CNN AUC" : roc_auc,
+                            "CNN Specificity" : Specificity,
+                            "CNN Sensitivity" : Sensitivity
                             })
 
+# ML ===============================================================
             if RUNML:
-                # Kfold ML 結束交叉驗證
-                ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, compute_img = MyEstimator.confusion(ML_total_true, ML_total_pred, ML_total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_ML')
-                ML_roc_auc, confusion_img = MyEstimator.compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath, mode = 'Kfold_ML')
+                # 強分類器
+                # 提取特徵圖
+                print("================================= Catboots Training ===============================================")
+                ML_train_loader = DataLoader(train, shuffle = np.True_, num_workers = 1, persistent_workers = True)
+                ML_val_loader = DataLoader(val, shuffle = True, num_workers = 1, persistent_workers = True)
 
-                # print("==================================== ML Training=================================================")
-                # print("True : 1 but 0 :")
-                # print(error_list['1_to_0'])
-                # print("True : 0 but 1 :")
-                # print(error_list['0_to_1'])
+                feature_train_data, feature_train_label, train_keyLabel = load_feature(ML_train_loader, model)
+                feature_val_data, feature_val_label, ML_val_keyLabel = load_feature(ML_val_loader, model)
+                ML_total_keyLabel += ML_val_keyLabel
+
+                predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
+
+                ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(Kfold_cnt))
+                ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, ML_val_keyLabel, classes = CLASSNANE, logPath = logPath+"\\img", mode ='ML_' + str(Kfold_cnt))
 
                 if ML_roc_auc != -1:
-                    ML_roc_auc = float(max(ML_roc_auc.values()))
-
+                    ML_roc_auc = max(ML_roc_auc.values())
                 
-                logger.info("=============================== KFlod Finish =====================================================")
-                logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
-                logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-                logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
-                logger.info("========================================= Model ===================================================")
-                logger.info(model)
+                logger.info("Kfold = [{}]\t".format(Kfold_cnt))
+                logger.info("Accuracy    : {:.2} => {:.2}\t AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+                logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
+                logger.info("-------------------------------------------------------------------------------------")
 
                 if WANDBRUN:
                     wb_run.log({
-                                "KFold_CNN_ML Accuracy" : ML_Accuracy,
-                                "KFold_CNN_ML AUC" : ML_roc_auc,
-                                "KFold_CNN_ML Specificity" : ML_Specificity.item(),
-                                "KFold_CNN_ML Sensitivity" : ML_Sensitivity.item(),
-                                "KFold_CNN_ML compute": [wandb.Image(compute_img)],
-                                "KFold_CNN_ML confusion": [wandb.Image(confusion_img)]
-                            })
+                                "ML Accuracy" : ML_Accuracy,
+                                "ML AUC" : ML_roc_auc,
+                                "ML Specificity" : ML_Specificity,
+                                "ML Sensitivity" : ML_Sensitivity
+                                })
 
-            torch.cuda.empty_cache()    # 釋放記憶體
-            logging.shutdown()          # 關閉logger
+                ML_total_true += feature_val_label.tolist()
+                ML_total_pred += predict.tolist()
+                ML_total_pred_score += predict_Probability.tolist()
+            
+            if TRYMODEL:
+                ML_total_true = feature_val_label
+                ML_total_pred = predict
+                ML_total_pred_score = predict_Probability
+                break
+
+# Kflod end ================================================
+        # Kfold CNN 結束交叉驗證
+
+        Accuracy, Specificity, Sensitivity, error_list, confusion_img = MyEstimator.confusion(total_true, total_pred, total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_CNN')
+        roc_auc, compute_img = MyEstimator.compute_auc(total_true, total_pred_score, CLASSNANE, logPath, mode = 'Kfold_CNN')
+        
+        # print("==================================== CNN Training=================================================")
+        # print("True : 1 but 0 :")        # print(error_list['1_to_0'])
+        # print("True : 0 but 1 :")
+        # print(error_list['0_to_1'])
+
+
+        if roc_auc != -1:
+                roc_auc = float(max(roc_auc.values()))
+        if WANDBRUN:
+            wb_run.log({
+                        "KFold_CNN_ML Accuracy" : Accuracy,
+                        "KFold_CNN_ML AUC" : roc_auc,
+                        "KFold_CNN_ML Specificity" : Specificity.item(),
+                        "KFold_CNN_ML Sensitivity" : Sensitivity.item(),
+                        "KFold_CNN_ML compute": [wandb.Image(compute_img)],
+                        "KFold_CNN_ML confusion": [wandb.Image(confusion_img)]
+                        })
+
+        if RUNML:
+            # Kfold ML 結束交叉驗證
+            ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, compute_img = MyEstimator.confusion(ML_total_true, ML_total_pred, ML_total_keyLabel, classes = CLASSNANE, logPath = logPath, mode = 'Kfold_ML')
+            ML_roc_auc, confusion_img = MyEstimator.compute_auc(ML_total_true, ML_total_pred_score, CLASSNANE, logPath, mode = 'Kfold_ML')
+
+            # print("==================================== ML Training=================================================")
+            
+
+            if ML_roc_auc != -1:
+                ML_roc_auc = float(max(ML_roc_auc.values()))
+
+            
+            logger.info("=============================== KFlod Finish =====================================================")
+            logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
+            logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
+            logger.info("===================================================================================================")
+            
+            logger.info("True : 1 but 0 :")
+            logger.info(error_list['1_to_0'])
+            logger.info("True : 0 but 1 :")
+            logger.info(error_list['0_to_1'])
+            
+            logger.info("Model : \n" + str(model))
+
+            if WANDBRUN:
+                wb_run.log({
+                            "KFold_CNN_ML Accuracy" : ML_Accuracy,
+                            "KFold_CNN_ML AUC" : ML_roc_auc,
+                            "KFold_CNN_ML Specificity" : ML_Specificity.item(),
+                            "KFold_CNN_ML Sensitivity" : ML_Sensitivity.item(),
+                            "KFold_CNN_ML compute": [wandb.Image(compute_img)],
+                            "KFold_CNN_ML confusion": [wandb.Image(confusion_img)]
+                        })
+
+        torch.cuda.empty_cache()    # 釋放記憶體
+        logging.shutdown()          # 關閉logger
 
         if WANDBRUN:
             wb_run.finish()
