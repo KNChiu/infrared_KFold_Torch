@@ -78,7 +78,7 @@ class MyDataset(Dataset):
             job_path = []
             Data_all = {}
 
-            for classes in ['0_Ischemia','1_Infect']:
+            for classes in ['0_Infect', '1_Ischemia',]:
                 f = path_fold+classes+'/'
 
                 for img_name in os.listdir(f):
