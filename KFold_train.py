@@ -235,7 +235,12 @@ def load_feature(dataloader, model):
         x = model.downC(x)
         
         x = model.cm_layer(x)
+        x = model.ca(x) * x
+        
+        x = model.cm_layer(x)
+        x = model.ca(x) * x
 
+        x = model.cm_layer(x)
         x = model.ca(x) * x
 
         # x = x.mean([-2, -1])
@@ -319,8 +324,8 @@ if __name__ == '__main__':
     # KFOLD_N = 2
     # EPOCH = 1
     KFOLD_N = 10
-    EPOCH = 678
-    TRYMODEL = False
+    EPOCH = 363
+    TRYMODEL = True
     VRAM_FAST = False
 
     BATCHSIZE = 16
