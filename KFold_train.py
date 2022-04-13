@@ -59,7 +59,7 @@ def fit_model(model, train_loader, val_loader, classes):
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
     loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 4)
 
-    cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=WARMUP_ITER//2, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
+    cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
     # scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=0, cycle_mult=2.0, max_lr=LR, min_lr=0, warmup_steps=0, gamma=1.0)
 
     warm_up_iter = WARMUP_ITER
@@ -313,12 +313,13 @@ if __name__ == '__main__':
     KERNELSIZE = 7
     TRAINMODE = 1
     
-    WARMUP_ITER = 100
+    WARMUP_ITER = 50
+    # WARMUP_ITER = 100
 
     # KFOLD_N = 2
     # EPOCH = 1
     KFOLD_N = 10
-    EPOCH = 448
+    EPOCH = 678
     TRYMODEL = False
     VRAM_FAST = False
 
