@@ -48,8 +48,8 @@ class MyEstimator():
         error_list['0_to_1'] = t0p1
         
         if len(classes) == 2:
-            cf_matrix = confusion_matrix(y_true, y_pred, labels=[0, 1])
-            TN, FP, FN, TP = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+            cf_matrix = confusion_matrix(y_true, y_pred)
+            TN, FP, FN, TP = confusion_matrix(y_true, y_pred).ravel()
             if (TN + FP) != 0:
                 Specificity = TN / (TN + FP)
             if (TP + FN) != 0:
