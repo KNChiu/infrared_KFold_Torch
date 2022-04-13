@@ -44,47 +44,37 @@ class SpatialAttention(nn.Module):
         return self.sigmoid(x)
 
 def convmixer_layer(dim, depth, kernel_size, train_mode=0):
-    if train_mode == 0:
-        return nn.Sequential(   
-            *[Residual(nn.Sequential( 
+    if train_mode == 1:
+        return Residual(nn.Sequential( 
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=3, groups=dim),
-                        # ChannelAttention(dim),
-                        # nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
-                        # ChannelAttention(dim),
+                        nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
-                    Residual(nn.Sequential(
+                    # Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=1),
-                        # ChannelAttention(dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim)
-                    )), 
+                    # )), 
             )
-            )for dilation_rate in range(depth)], 
         )
-    elif train_mode == 1:
-        return nn.Sequential(   
-            *[Residual(nn.Sequential( 
+    elif train_mode == 0:
+        return Residual(nn.Sequential( 
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
-                        # ChannelAttention(dim),
-                        # nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=1, groups=dim),
-                        # ChannelAttention(dim),
+                        nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
-                    Residual(nn.Sequential(
+                    # Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=1),
-                        # ChannelAttention(dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim)
-                    )), 
+                    # )), 
             )
-            )for dilation_rate in range(depth)], 
         )
 
 class PatchConvMixerAttention(nn.Module):
@@ -117,8 +107,14 @@ class PatchConvMixerAttention(nn.Module):
     def forward(self, x):
         x = self.patch_embed(x)
         x = self.downC(x)
-        x = self.cm_layer(x)
 
+        x = self.cm_layer(x)
+        x = self.ca(x) * x
+        
+        x = self.cm_layer(x)
+        x = self.ca(x) * x
+
+        x = self.cm_layer(x)
         x = self.ca(x) * x
         # x = self.sa(x) * x
 

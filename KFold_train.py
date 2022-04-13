@@ -57,7 +57,7 @@ def fit_model(model, train_loader, val_loader, classes):
     # optimizer = torch.optim.Adam(model.parameters(), lr = LR)
     optimizer = torch.optim.SGD(model.parameters(), lr = LR)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
-    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 4)
+    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 2)
 
     cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
     # scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=0, cycle_mult=2.0, max_lr=LR, min_lr=0, warmup_steps=0, gamma=1.0)
@@ -322,9 +322,9 @@ if __name__ == '__main__':
     # WARMUP_ITER = 100
 
     # KFOLD_N = 2
-    # EPOCH = 1
+    EPOCH = 1
     KFOLD_N = 10
-    EPOCH = 363
+    # EPOCH = 363
     TRYMODEL = True
     VRAM_FAST = False
 
