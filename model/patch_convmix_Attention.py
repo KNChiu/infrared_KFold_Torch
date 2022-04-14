@@ -44,12 +44,12 @@ class SpatialAttention(nn.Module):
         return self.sigmoid(x)
 
 def convmixer_layer(dim, depth, kernel_size, train_mode=0):
-    if train_mode == 1:
+    if train_mode == 0:
         return Residual(nn.Sequential( 
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=3, groups=dim),
                         nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=3, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
@@ -60,12 +60,12 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
                     # )), 
             )
         )
-    elif train_mode == 0:
+    elif train_mode == 1:
         return Residual(nn.Sequential( 
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
                         nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=1, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
@@ -93,9 +93,7 @@ class PatchConvMixerAttention(nn.Module):
         self.ca = ChannelAttention(dim)
         self.sa = SpatialAttention()
 
-        self.downC = nn.Conv2d(dim, dim, kernel_size=1)
         self.cm_layer = convmixer_layer(dim, depth, kernel_size, train_mode)
-
 
         self.gap = nn.AdaptiveAvgPool2d((1,1))
 
@@ -106,23 +104,27 @@ class PatchConvMixerAttention(nn.Module):
     
     def forward(self, x):
         x = self.patch_embed(x)
-        x = self.downC(x)
 
         x = self.cm_layer(x)
-        x = self.ca(x) * x
+        # x = self.ca(x) * x
         
         x = self.cm_layer(x)
-        x = self.ca(x) * x
+        # x = self.ca(x) * x
 
         x = self.cm_layer(x)
+
+        x = self.cm_layer(x)
+        
+
         x = self.ca(x) * x
         # x = self.sa(x) * x
 
         gap = torch.mean(x,1)       # 可視化層
-        featureOut = x.mean([-2, -1])   
 
         x = self.gap(x)
         x = self.flat(x)
+
+        featureOut = x              # ML 特徵層
 
         output = self.fc(x)
 
