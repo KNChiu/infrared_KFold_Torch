@@ -329,10 +329,10 @@ if __name__ == '__main__':
     # WARMUP_ITER = 100
 
     # KFOLD_N = 2
-    # EPOCH = 1
+    EPOCH = 1
     KFOLD_N = 10
-    EPOCH = 363
-    TRYMODEL = False
+    # EPOCH = 363
+    TRYMODEL = True
     VRAM_FAST = False
 
     BATCHSIZE = 16
@@ -421,7 +421,7 @@ if __name__ == '__main__':
 
 
         # 匯入模型
-        model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE), train_mode = 1).to(device)
+        model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE), train_mode = train_mode).to(device)
         
         # Train
         fit_model(model, train_loader, val_loader, CLASSNANE)
