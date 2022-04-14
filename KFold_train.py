@@ -233,22 +233,8 @@ def load_feature(dataloader, model):
     feature, label, keyLabel = [], [], []
     for idx, (x, y, key) in enumerate(dataloader):
         keyLabel += key
-        x = model.patch_embed(x.to(device))
-        x = model.downC(x)
+        _, _, featureOut = model(x.to(device))
         
-        x = model.cm_layer(x)
-        x = model.ca(x) * x
-        
-        x = model.cm_layer(x)
-        x = model.ca(x) * x
-
-        x = model.cm_layer(x)
-        x = model.ca(x) * x
-
-        # x = x.mean([-2, -1])
-        x = model.gap(x)
-        featureOut = model.flat(x)
-
         featureOut = featureOut[0].to('cpu').detach().numpy()
         featureOut = featureOut.reshape((1, -1))[0]
 
@@ -312,13 +298,21 @@ if __name__ == '__main__':
     args = parser.parse_args()                                  # 解析
     train_mode = args.train_mode                                # 指派訓練模式
 
+    if train_mode == 0:
+        modelName = "7d3G-3d3GB_1GB_|A_X4_FL2_"
+    elif train_mode == 1:
+        modelName = "7d2G-3d2GB_1GB_|A_X4_FL2_"
+
+
+
+
     CLASSNANE = ['Infect', 'Ischemia']
 
     SAVEPTH = True
     SAVEIDX = True
     RUNML = True
     SAVEBAST = False
-    WANDBRUN = False
+    WANDBRUN = True
     # WANDBRUN = True
 
     CNN_DETPH = 3
@@ -329,10 +323,10 @@ if __name__ == '__main__':
     # WARMUP_ITER = 100
 
     # KFOLD_N = 2
-    EPOCH = 1
+    # EPOCH = 1
     KFOLD_N = 10
-    # EPOCH = 363
-    TRYMODEL = True
+    EPOCH = 363
+    TRYMODEL = False
     VRAM_FAST = False
 
     BATCHSIZE = 16
@@ -363,7 +357,7 @@ if __name__ == '__main__':
         os.mkdir(logPath)
         os.mkdir(logPath+'//img//')
 
-    logger = get_logger(logPath + '//training.log', name='train_mode_'+str(train_mode))     # 建立 logger
+    logger = get_logger(logPath + '//training.log', name=str(modelName))     # 建立 logger
     
 
     logger.info("================================= CNN -> ML ============================================")
@@ -387,7 +381,7 @@ if __name__ == '__main__':
         Kfold_cnt += 1
 
         if WANDBRUN:
-            wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str("kfold_N="+str(Kfold_cnt)), dir = WANDBDIR)
+            wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
         
         if SAVEIDX:
             with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
