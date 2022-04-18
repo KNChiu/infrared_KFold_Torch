@@ -9,6 +9,8 @@ import pickle
 from queue import Queue
 from threading import Thread
 
+from torchvision import transforms
+
 class MyDataset(Dataset):
     def __init__(self, path_fold:str,mutPath:str,cpu_count:int,transform=None):
         print("開始讀檔")
@@ -46,15 +48,26 @@ class MyDataset(Dataset):
             self.label.append(label)
             self.key.append(key)
         
-        self.data = torch.Tensor(np.array(self.data)).permute(0,3,1,2)
+        # self.data = torch.Tensor(np.array(self.data)).permute(0,3,1,2)
+        # self.data = self.data
         self.label = torch.LongTensor(np.array(self.label))
         self.key = np.array(self.key)
     
     def loadimg(self, job_path):
         inputImg = cv2.imread(job_path)
-        inputImg = cv2.resize(inputImg, (640, 640), interpolation=cv2.INTER_AREA)
+        outputImg = cv2.resize(inputImg, (640, 640), interpolation=cv2.INTER_AREA)
 
-        return inputImg, job_path
+        transform1 = transforms.Compose([
+                                    transforms.ToTensor(),
+                                    # transforms.Normalize(
+                                    #             mean=[0.485, 0.456, 0.406],
+                                    #             std=[0.229, 0.224, 0.225])
+                                    ])
+
+        outputImg = transform1(outputImg)
+
+
+        return outputImg, job_path
 
     def load_mut(self, path_fold:str,mutPath:str,cpu_count:int) -> dict:
         if os.path.isfile(mutPath + '\load_mut.json'):
