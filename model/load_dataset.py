@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
-import cv2
+# import cv2
+from PIL import Image
 import concurrent
 import os
 import numpy as np
@@ -54,17 +55,18 @@ class MyDataset(Dataset):
         self.key = np.array(self.key)
     
     def loadimg(self, job_path):
-        inputImg = cv2.imread(job_path)
-        outputImg = cv2.resize(inputImg, (640, 640), interpolation=cv2.INTER_AREA)
+        inputImg = Image.open(job_path)
+        # outputImg = cv2.resize(inputImg, (640, 640), interpolation=cv2.INTER_AREA)
 
         transform1 = transforms.Compose([
+                                    transforms.Resize([640, 640]),
                                     transforms.ToTensor(),
                                     # transforms.Normalize(
                                     #             mean=[0.485, 0.456, 0.406],
                                     #             std=[0.229, 0.224, 0.225])
                                     ])
 
-        outputImg = transform1(outputImg)
+        outputImg = transform1(inputImg)
 
 
         return outputImg, job_path
