@@ -351,7 +351,8 @@ if __name__ == '__main__':
 
     start = time.time()
     # 建立 log
-    logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M%S", time.localtime()))
+    # logPath = LOGPATH + "//logs//" + str(time.strftime("%m%d_%H%M%S", time.localtime()))
+    logPath = LOGPATH + "//logs//" + str(modelName)
     if not os.path.isdir(logPath):
         os.mkdir(logPath)
         os.mkdir(logPath+'//img//')
