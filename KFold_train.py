@@ -72,6 +72,7 @@ def fit_model(model, train_loader, val_loader, classes):
     warm_up_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warm_up_with_cosine_lr)
 
 
+
     mini_val_loss = 100
     for epoch in range(EPOCH):
         training_loss = 0
@@ -299,9 +300,12 @@ if __name__ == '__main__':
     train_mode = args.train_mode                                # 指派訓練模式
 
     if train_mode == 0:
-        modelName = "7d3G-3d3GB_1GB_|A_X4_FL2_"
+        modelName = "9d1G-7d1GB_1GB_X4_FL2_paper_"
     elif train_mode == 1:
-        modelName = "7d2G-3d2GB_1GB_|A_X4_FL2_"
+        modelName = "9d1G-5d1GB_1GB_X4_FL2_paper_"
+    elif train_mode == 2:
+        modelName = "9d1G-3d1GB_1GB_X4_FL2_paper_"
+
 
 
 
@@ -317,7 +321,6 @@ if __name__ == '__main__':
 
     CNN_DETPH = 3
     KERNELSIZE = 7
-    TRAINMODE = 0
     
     WARMUP_ITER = 50
     # WARMUP_ITER = 100
@@ -325,7 +328,7 @@ if __name__ == '__main__':
     # KFOLD_N = 2
     # EPOCH = 1
     KFOLD_N = 10
-    EPOCH = 363
+    EPOCH = 683
     TRYMODEL = False
     VRAM_FAST = False
 
@@ -337,7 +340,7 @@ if __name__ == '__main__':
     CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
-    DATAPATH = r'C:\Data\surgical_temperature\cut\classification\cut_98\\'
+    DATAPATH = r'C:\Data\surgical_temperature\color\via_jet\\'
     WANDBDIR = r'C:\Data\surgical_temperature\trainingLogs\\'
 
 
@@ -345,10 +348,6 @@ if __name__ == '__main__':
     Dataload = MyDataset(DATAPATH, LOGPATH, 2)
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
-    transform = transforms.Compose([transforms.Resize((640, 640)),
-                                    transforms.ToTensor()])
-
 
     start = time.time()
     # 建立 log
@@ -381,7 +380,7 @@ if __name__ == '__main__':
         Kfold_cnt += 1
 
         if WANDBRUN:
-            wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="KFold_2", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
+            wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="ForPaper", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
         
         if SAVEIDX:
             with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
@@ -469,8 +468,8 @@ if __name__ == '__main__':
                 ML_roc_auc = max(ML_roc_auc.values())
             
             logger.info("Kfold = [{}]\t".format(Kfold_cnt))
-            logger.info("Accuracy    : {:.2} => {:.2}\t AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-            logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
+            logger.info("Accuracy    : {:.2} => {:.2}\t  AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            logger.info("Specificity : {:.2} => {:.2}\t  Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
             logger.info("-------------------------------------------------------------------------------------")
 
             if WANDBRUN:
@@ -529,8 +528,8 @@ if __name__ == '__main__':
         
         logger.info("=============================== KFlod Finish =====================================================")
         logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
-        logger.info("Accuracy : {:.2} => {:.2}\t AUC : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-        logger.info("Specificity : {:.2} => {:.2}\t Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
+        logger.info("Accuracy    : {:.2} => {:.2}\t  AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+        logger.info("Specificity : {:.2} => {:.2}\t  Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
         logger.info("===================================================================================================")
         logger.info("KFlod time : " + str(time.time() - start) + " s")
         logger.info("True : 1 but 0 :")

@@ -47,33 +47,43 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
     if train_mode == 0:
         return Residual(nn.Sequential( 
                     Residual(nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=3, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=3, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
-                    # Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=1),
                         nn.GELU(),
                         nn.BatchNorm2d(dim)
-                    # )), 
             )
         )
     elif train_mode == 1:
         return Residual(nn.Sequential( 
                     Residual(nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size=kernel_size, padding='same', dilation=2, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
-                    # Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=1),
                         nn.GELU(),
                         nn.BatchNorm2d(dim)
-                    # )), 
+            )
+        )
+    elif train_mode == 2:
+        return Residual(nn.Sequential( 
+                    Residual(nn.Sequential(
+                        nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
+                        nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=1, groups=dim),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim),
+                    )), 
+                        nn.Conv2d(dim, dim, kernel_size=1),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim)
             )
         )
 
@@ -114,9 +124,8 @@ class PatchConvMixerAttention(nn.Module):
         x = self.cm_layer(x)
 
         x = self.cm_layer(x)
-        
 
-        x = self.ca(x) * x
+        # x = self.ca(x) * x
         # x = self.sa(x) * x
 
         gap = torch.mean(x,1)       # 可視化層
