@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 from sklearn.model_selection import KFold
 from sklearn.metrics import confusion_matrix ,roc_curve, auc, accuracy_score
+from xgboost import XGBClassifier
 
 import matplotlib.pyplot as plt 
 from itertools import cycle
@@ -250,6 +251,7 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations):
     # cbc = cb.CatBoostClassifier(random_state=SEED, use_best_model=True, iterations=iterations, depth = CatBoost_depth,random_seed=SEED)
     # cbc = cb.CatBoostClassifier(iterations=10000,learning_rate=0.1,max_depth=7,verbose=100,
     #                                   early_stopping_rounds=500,task_type='GPU',eval_metric='AUC',random_seed=SEED)
+    
     cbc = cb.CatBoostClassifier(
                                loss_function='MultiClass',
                                 eval_metric='WKappa',
@@ -262,17 +264,30 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations):
                                 #l2_leaf_reg=10,
                                 #border_count=96,
                                random_seed=42,
-                                use_best_model=True
+                                # use_best_model=True
+                                use_best_model=False
+                                
                               )
 
     cbc.fit(train_data, train_label,
-            eval_set = [(val_data, val_label)],
+            # eval_set = [(val_data, val_label)],
             verbose=False,
             plot=False
             )
     predict = cbc.predict(val_data)
     predict_Probability = cbc.predict(val_data, prediction_type='Probability')
     return predict, predict_Probability
+
+def XGBoost_fit(train_data, train_label, val_data, val_label, iterations):
+    xgbc = XGBClassifier(n_estimators=iterations, max_depth=12)
+    xgbc.fit(train_data, train_label,
+            # eval_set = [(val_data, val_label)],
+            verbose=False)
+
+    predict = xgbc.predict(val_data)
+    predictions = xgbc.predict_proba(val_data)
+
+    return predict, predictions
 
 def get_logger(filename, verbosity=1, name=None):
     level_dict = {0: logging.DEBUG, 1: logging.INFO, 2: logging.WARNING}
@@ -292,22 +307,27 @@ def get_logger(filename, verbosity=1, name=None):
  
     return logger
 
-
 if __name__ == '__main__':
-    parser = ArgumentParser()                                   # 使用超參數套件
-    parser.add_argument('--train_mode', default=0, type=int)    # 使用參數控制訓練模式
-    args = parser.parse_args()                                  # 解析
-    train_mode = args.train_mode                                # 指派訓練模式
+    parser = ArgumentParser()                                       # 使用超參數套件
+    parser.add_argument('--train_mode', default=0, type=int)        # 使用參數控制訓練模式
+    parser.add_argument('--ml_mode', default='XGBoost', type=str)   # 使用參數控制訓練模式
+    args = parser.parse_args()                                      # 解析
+    train_mode = args.train_mode                                    # 指派訓練模式
+    ML_MODE = args.ml_mode                                          # 指派訓練模式
+
+    # ML_MODE = 'XGBoost'
+    # ML_MODE = 'CatBoost'
+
+
 
     if train_mode == 0:
-        modelName = "9d1G-7d1GB_1GB_X4_FL2_paper_"
+        modelName = "7d4G-5d4GB_1GB_CA_SA_X4_paper_"
     elif train_mode == 1:
-        modelName = "9d1G-5d1GB_1GB_X4_FL2_paper_"
+        modelName = "7d4G-5d3GB_1GB_CA_SA_X4_paper_"
     elif train_mode == 2:
-        modelName = "9d1G-3d1GB_1GB_X4_FL2_paper_"
-
-
-
+        modelName = "7d3G-5d2GB_1GB_CA_SA_X4_paper_"
+    elif train_mode == 3:
+        modelName = "7d1G-3d1GB_1GB_X5_paper_"
 
 
     CLASSNANE = ['Infect', 'Ischemia']
@@ -317,7 +337,7 @@ if __name__ == '__main__':
     RUNML = True
     SAVEBAST = False
     WANDBRUN = True
-    # WANDBRUN = True
+    # WANDBRUN = False
 
     CNN_DETPH = 3
     KERNELSIZE = 7
@@ -340,7 +360,7 @@ if __name__ == '__main__':
     CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
-    DATAPATH = r'C:\Data\surgical_temperature\color\via_jet\\'
+    DATAPATH = r'C:\Data\surgical_temperature\color\via_plasma\\'
     WANDBDIR = r'C:\Data\surgical_temperature\trainingLogs\\'
 
 
@@ -356,9 +376,10 @@ if __name__ == '__main__':
     if not os.path.isdir(logPath):
         os.mkdir(logPath)
         os.mkdir(logPath+'//img//')
-
-    logger = get_logger(logPath + '//training.log', name=str(modelName))     # 建立 logger
-    
+    if ML_MODE == 'XGBoost':
+        logger = get_logger(logPath + '//CNN_XGBoost.log', name=str(modelName))     # 建立 logger
+    elif ML_MODE == 'CatBoost':
+        logger = get_logger(logPath + '//CNN_CatBoost.log', name=str(modelName))
 
     logger.info("================================= CNN -> ML ============================================")
     # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
@@ -381,7 +402,7 @@ if __name__ == '__main__':
         Kfold_cnt += 1
 
         if WANDBRUN:
-            wb_run = wandb.init(project='infraredThermal_kfold', entity='y9760210', reinit=True, group="ForPaper", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
+            wb_run = wandb.init(project='infraredThermal_kfold', reinit=True, group="ForPaper", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
         
         if SAVEIDX:
             with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
@@ -417,8 +438,9 @@ if __name__ == '__main__':
         # 匯入模型
         model = PatchConvMixerAttention(dim = 768, depth = CNN_DETPH, kernel_size = KERNELSIZE, patch_size = 16, n_classes = len(CLASSNANE), train_mode = train_mode).to(device)
         
-        # Train
-        fit_model(model, train_loader, val_loader, CLASSNANE)
+        if ML_MODE == 'XGBoost':
+            # Train
+            fit_model(model, train_loader, val_loader, CLASSNANE)
 
         # Test
         Accuracy, roc_auc, Specificity, Sensitivity, kfold_true, kfold_pred, kfold_pred_score, gap, val_keyLabel, error_list = test_model(model, val_loader, CLASSNANE)
@@ -452,7 +474,7 @@ if __name__ == '__main__':
         if RUNML:
             # 強分類器
             # 提取特徵圖
-            print("================================= Catboots Training ===============================================")
+            print("================================= ML Training ===============================================")
             ML_train_loader = DataLoader(train, shuffle = np.True_, num_workers = 1, persistent_workers = True)
             ML_val_loader = DataLoader(val, shuffle = True, num_workers = 1, persistent_workers = True)
 
@@ -460,8 +482,11 @@ if __name__ == '__main__':
             feature_val_data, feature_val_label, ML_val_keyLabel = load_feature(ML_val_loader, model)
             ML_total_keyLabel += ML_val_keyLabel
 
-            predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
-
+            if ML_MODE == 'XGBoost':
+                predict, predict_Probability = XGBoost_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
+            elif ML_MODE == 'CatBoost':
+                predict, predict_Probability = catboots_fit(feature_train_data, feature_train_label, feature_val_data, feature_val_label, CATBOOTS_INTER)
+            
             ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(Kfold_cnt))
             ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, ML_val_keyLabel, classes = CLASSNANE, logPath = logPath+"\\img", mode ='ML_' + str(Kfold_cnt))
 
