@@ -113,57 +113,57 @@ class MyDataset(Dataset):
         return outputImg, job_path
 
     def load_mut(self, path_fold:str,mutPath:str,cpu_count:int) -> dict:
-        # if os.path.isfile(mutPath + '\load_mut.json'):
-        #     print("使用暫存檔資料")
-        #     try:
-        #         with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
-        #             with open(mutPath + '\load_mut.json', 'rb') as fp:
-        #                 Data_all = pickle.load(fp)
-        #             return Data_all
-        #     except:
-        #         print("\r 多進程失敗使用單進程讀暫存檔資料")
-        #         with open(mutPath + '\load_mut.json', 'rb') as fp:
-        #             Data_all = pickle.load(fp)
-        #         return Data_all
+        if os.path.isfile(mutPath + '\load_mut.json'):
+            print("使用暫存檔資料")
+            try:
+                with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
+                    with open(mutPath + '\load_mut.json', 'rb') as fp:
+                        Data_all = pickle.load(fp)
+                    return Data_all
+            except:
+                print("\r 多進程失敗使用單進程讀暫存檔資料")
+                with open(mutPath + '\load_mut.json', 'rb') as fp:
+                    Data_all = pickle.load(fp)
+                return Data_all
 
-        #     # with open(mutPath + '\load_mut.json', 'rb') as fp:
-        #     #     Data_all = pickle.load(fp)
-        #     # return Data_all
-        # else:
-        # print("站存檔不存在，重新創建")
-        print("重新創建數據集")
-        job_path = []
-        Data_all = {}
+            # with open(mutPath + '\load_mut.json', 'rb') as fp:
+            #     Data_all = pickle.load(fp)
+            # return Data_all
+        else:
+            print("站存檔不存在，重新創建")
+            # print("重新創建數據集")
+            job_path = []
+            Data_all = {}
 
-        for classes in ['0_Infect', '1_Ischemia',]:
-            f = path_fold+classes+'/'
+            for classes in ['0_Infect', '1_Ischemia',]:
+                f = path_fold+classes+'/'
 
-            for img_name in os.listdir(f):
-                if (img_name.split('.')[-1]) == "jpg":
-                    job_path += [f+img_name]
-            # job_path += [f+img_name for img_name in os.listdir(f)]
-        try:
-            with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
-                    future = list(executor.map(self.loadimg, job_path))
-        except:
-            print("\r 多進程失敗 使用單進程讀圖")
-            future = list(map(self.loadimg, job_path))
+                for img_name in os.listdir(f):
+                    if (img_name.split('.')[-1]) == "jpg":
+                        job_path += [f+img_name]
+                # job_path += [f+img_name for img_name in os.listdir(f)]
+            try:
+                with concurrent.futures.ProcessPoolExecutor(cpu_count) as executor: ## 默认为1
+                        future = list(executor.map(self.loadimg, job_path))
+            except:
+                print("\r 多進程失敗 使用單進程讀圖")
+                future = list(map(self.loadimg, job_path))
 
-        for img, file_path in future:
-            path, img_name = os.path.split(file_path)
-            _, classes = os.path.split(path)
-            key = img_name.split('_')[0] + '_' + classes
+            for img, file_path in future:
+                path, img_name = os.path.split(file_path)
+                _, classes = os.path.split(path)
+                key = img_name.split('_')[0] + '_' + classes
 
-            if key in Data_all:
-                Data_all[key].append(img)
-            else:
-                Data_all[key] = img   
+                if key in Data_all:
+                    Data_all[key].append(img)
+                else:
+                    Data_all[key] = img   
 
-        # 寫入暫存檔
-        with open(mutPath + '\load_mut.json', 'wb') as fp:
-            pickle.dump(Data_all, fp)
-        
-        return Data_all
+            # 寫入暫存檔
+            with open(mutPath + '\load_mut.json', 'wb') as fp:
+                pickle.dump(Data_all, fp)
+            
+            return Data_all
 
 
 class CudaDataLoader:
