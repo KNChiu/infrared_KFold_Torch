@@ -265,12 +265,12 @@ def catboots_fit(train_data, train_label, val_data, val_label, iterations):
                                 #border_count=96,
                                random_seed=42,
                                 # use_best_model=True
-                                use_best_model=False
+                                use_best_model=True
                                 
                               )
 
     cbc.fit(train_data, train_label,
-            # eval_set = [(val_data, val_label)],
+            eval_set = [(val_data, val_label)],
             verbose=False,
             plot=False
             )
@@ -321,11 +321,11 @@ if __name__ == '__main__':
 
 
     if train_mode == 0:
-        modelName = "7d4G-5d4GB_1GB_CA_SA_X4_paper_"
+        modelName = "7d4G-5d4GB_1GB_X4_CA_SA_paper_"
     elif train_mode == 1:
-        modelName = "7d4G-5d3GB_1GB_CA_SA_X4_paper_"
+        modelName = "7d4G-5d3GB_1GB_X4_CA_SA_paper_"
     elif train_mode == 2:
-        modelName = "7d3G-5d2GB_1GB_CA_SA_X4_paper_"
+        modelName = "7d3G-5d2GB_1GB_X4_CA_SA_paper_"
     elif train_mode == 3:
         modelName = "7d1G-3d1GB_1GB_X5_paper_"
 
