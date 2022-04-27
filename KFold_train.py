@@ -321,14 +321,21 @@ if __name__ == '__main__':
 
 
     if train_mode == 0:
-        modelName = "7d4G-5d4GB_1GB_X4_CA_SA_paper_"
+        modelName = "(7d4G-3d4GB)_1GB_X5_CA_SA_RB_Test_"
     elif train_mode == 1:
-        modelName = "7d4G-5d3GB_1GB_X4_CA_SA_paper_"
+        modelName = "(7d4G-3d3GB)_1GB_X5_CA_SA_RB_Test_"
     elif train_mode == 2:
-        modelName = "7d3G-5d2GB_1GB_X4_CA_SA_paper_"
+        modelName = "(7d3G-3d2GB)_1GB_X5_CA_SA_RB_Test_"
     elif train_mode == 3:
-        modelName = "7d1G-3d1GB_1GB_X5_paper_"
-
+        modelName = "(7d1G-5d1GB)_1GB_X4_CA_SA_RB_Test_"
+    elif train_mode == 4:
+        modelName = "(9d1G-7d1GB)_1GB_X3_CA_SA_RB_Test_"
+    elif train_mode == 5:
+        modelName = "(9d1G-7d1GB)_1GB_X4_CA_SA_RB_Test_"
+    elif train_mode == 6:
+        modelName = "(9d1G-5d1GB)_1GB_X3_CA_SA_RB_Test_"
+    elif train_mode == 7:
+        modelName = "(9d1G-5d1GB)_1GB_X4_CA_SA_RB_Test_"
 
     CLASSNANE = ['Infect', 'Ischemia']
 
@@ -336,8 +343,11 @@ if __name__ == '__main__':
     SAVEIDX = True
     RUNML = True
     SAVEBAST = False
-    WANDBRUN = True
-    # WANDBRUN = False
+
+    if ML_MODE == 'XGBoost':
+        WANDBRUN = True
+    elif ML_MODE == 'CatBoost':
+        WANDBRUN = False
 
     CNN_DETPH = 3
     KERNELSIZE = 7
@@ -348,7 +358,8 @@ if __name__ == '__main__':
     # KFOLD_N = 2
     # EPOCH = 1
     KFOLD_N = 10
-    EPOCH = 683
+    EPOCH = 363
+    # EPOCH = 683
     TRYMODEL = False
     VRAM_FAST = False
 
@@ -360,7 +371,7 @@ if __name__ == '__main__':
     CATBOOTS_INTER = 1000
 
     LOGPATH = r'C:\Data\surgical_temperature\trainingLogs\\'
-    DATAPATH = r'C:\Data\surgical_temperature\color\via_plasma\\'
+    DATAPATH = r'C:\Data\surgical_temperature\color\\via_jet2\\'
     WANDBDIR = r'C:\Data\surgical_temperature\trainingLogs\\'
 
 
@@ -402,7 +413,7 @@ if __name__ == '__main__':
         Kfold_cnt += 1
 
         if WANDBRUN:
-            wb_run = wandb.init(project='infraredThermal_kfold', reinit=True, group="ForPaper", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
+            wb_run = wandb.init(project='infraredThermal_kfold', reinit=True, group="ForTest", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
         
         if SAVEIDX:
             with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
