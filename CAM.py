@@ -89,18 +89,20 @@ def cam_visualize(idx, model, _input, img_show, imgsavePath):
 
     heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
     heatmap = np.uint8(heatmap * 255)
-    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    heatmapColor = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    heatmapColor_remove = heatmapColor.copy()
+    heatmapColor_remove[heatmap<80] = [0, 0, 0]
     # plt.imshow(heatmap)
     # plt.show()
 
     # print(np.min(heatmap), np.max(heatmap))
 
-    dst = cv2.addWeighted(img, 1, heatmap, 0.3, 0)
+    dst = cv2.addWeighted(img, 0.5, heatmapColor_remove, 0.8, 1)
     cv2.imwrite(imgsavePath+'//'+ str(idx) + '_img.jpg', img)
-    cv2.imwrite(imgsavePath+'//'+ str(idx) + '_heat.jpg', heatmap)
+    cv2.imwrite(imgsavePath+'//'+ str(idx) + '_heat.jpg', heatmapColor)
     cv2.imwrite(imgsavePath+'//'+ str(idx) + '_heatmap.jpg', dst)
     print("save as :", imgsavePath+'//'+ str(idx))
-    return heatmap
+    return heatmapColor
 
 
 if __name__ == '__main__':
@@ -146,7 +148,8 @@ if __name__ == '__main__':
         for idx, (x, y, key) in enumerate(ML_train_loader):
             img_list.append(x)
             cam_visualize(idx, model, x.to(device), img_list[idx], imgsavePath)
-
+            # break
+        break
 
 
 
