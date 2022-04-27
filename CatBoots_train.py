@@ -187,7 +187,7 @@ if __name__ == '__main__':
     train_mode = args.train_mode                                # 指派訓練模式
 
     if train_mode == 0:
-        modelName = "7d4G-5d4GB_1GB_X4_CA_SA_paper_"
+        modelName = "7d2G-3d2GB_1GB_X4_CA_SA_paper_"
     elif train_mode == 1:
         modelName = "7d4G-5d3GB_1GB_X4_CA_SA_paper_"
     elif train_mode == 2:
