@@ -49,7 +49,7 @@ class MyEstimator():
         
         if len(classes) == 2:
             cf_matrix = confusion_matrix(y_true, y_pred)
-            TN, FP, FN, TP = confusion_matrix(y_true, y_pred).ravel()
+            TP, FN, FP, TN = confusion_matrix(y_true, y_pred).ravel()
             if (TN + FP) != 0:
                 Specificity = TN / (TN + FP)
             if (TP + FN) != 0:
@@ -61,10 +61,11 @@ class MyEstimator():
             plt.close("all")
             df_cm = pd.DataFrame(cf_matrix, classes, classes)
             plt.figure(figsize = (9,6))
+            sns.set(font_scale=2)
             sns.heatmap(df_cm, annot=True, fmt="d", cmap='BuGn')
-            plt.xlabel('Predict', fontsize=10)        
-            plt.ylabel('True', fontsize=10)
-            plt.title(str(mode) + '_Acc : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=10)
+            plt.xlabel('Predict', fontsize=20)        
+            plt.ylabel('True', fontsize=20)
+            plt.title(str(mode) + '_Acc : {:.2f} | Specificity : {:.2f} | Sensitivity : {:.2f}'.format(Accuracy, Specificity, Sensitivity), fontsize=20)
 
             plot_img_np = self.get_img_from_fig(plt)    # plt 轉為 numpy]
             plt.savefig(logPath + "//" + str(mode) + "_confusion.jpg", bbox_inches='tight')
@@ -90,6 +91,7 @@ class MyEstimator():
             # Plot all ROC curves
             if logPath:
                 plt.close("all")
+                sns.set(font_scale=1)
                 plt.figure()
                 
                 for i, color in zip(range(len(classes)), colors):

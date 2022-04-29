@@ -321,13 +321,13 @@ if __name__ == '__main__':
 
 
     if train_mode == 0:
-        modelName = "(7d4G-3d4GB)_1GB_X5_CA_SA_RB_Test_"
+        modelName = "(7d4G-5d3GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 1:
-        modelName = "(7d4G-3d3GB)_1GB_X5_CA_SA_RB_Test_"
+        modelName = "(5d1G-1d1GB)_1GB_X3_RB_paper_"
     elif train_mode == 2:
-        modelName = "(7d3G-3d2GB)_1GB_X5_CA_SA_RB_Test_"
+        modelName = "(5d1G-3d1GB)_1GB_X4_RB_paper_"
     elif train_mode == 3:
-        modelName = "(7d1G-5d1GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(5d1G-1d1GB)_1GB_X4_RB_paper_"
     elif train_mode == 4:
         modelName = "(9d1G-7d1GB)_1GB_X3_CA_SA_RB_Test_"
     elif train_mode == 5:
@@ -337,7 +337,7 @@ if __name__ == '__main__':
     elif train_mode == 7:
         modelName = "(9d1G-5d1GB)_1GB_X4_CA_SA_RB_Test_"
 
-    CLASSNANE = ['Infect', 'Ischemia']
+    CLASSNANE = ['Ischemia', 'Infect']
 
     SAVEPTH = True
     SAVEIDX = True
