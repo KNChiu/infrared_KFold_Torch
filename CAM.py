@@ -88,10 +88,11 @@ def cam_visualize(idx, model, _input, img_show, imgsavePath):
     # plt.show()
 
     heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
+ 
     heatmap = np.uint8(heatmap * 255)
     heatmapColor = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
     heatmapColor_remove = heatmapColor.copy()
-    heatmapColor_remove[heatmap<80] = [0, 0, 0]
+    heatmapColor_remove[heatmap<60] = [0, 0, 0]
     # plt.imshow(heatmap)
     # plt.show()
 
@@ -114,7 +115,7 @@ if __name__ == '__main__':
     DATAPATH = r'C:\Data\surgical_temperature\color\\via_jet2_for_cam\\'
 
     train_mode = 0
-    modelName = "(7d2G-3d2GB)_1GB_X4_CA_SA_RB_Test_"
+    modelName = "(7d4G-5d3GB)_1GB_X4_CA_SA_RB_FL1_"
 
     logPath = DATALOGPATH + "//logs//" + str(modelName)
     imgsavePath = DATALOGPATH + "//cams//" + str(modelName)
