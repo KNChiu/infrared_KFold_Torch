@@ -47,9 +47,9 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
     if train_mode == 0:
         return nn.Sequential(*[nn.Sequential(
                         Residual(nn.Sequential(
-                            nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=2, groups=dim),
+                            nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=4, groups=dim),
                             nn.GELU(),
-                            nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=2, groups=dim),
+                            nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=4, groups=dim),
                             nn.GELU(),
                             nn.BatchNorm2d(dim),
                         )), 
@@ -63,6 +63,48 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=4, groups=dim),
                         nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=3, groups=dim),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim),
+                    )), 
+                        nn.Conv2d(dim, dim, kernel_size=1),
+                        nn.GELU(), 
+                        nn.BatchNorm2d(dim)
+            ) for i in range(4)]) 
+
+    elif train_mode == 2:
+        return nn.Sequential(*[nn.Sequential(
+                    Residual(nn.Sequential(
+                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=3, groups=dim),
+                        nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=2, groups=dim),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim),
+                    )), 
+                        nn.Conv2d(dim, dim, kernel_size=1),
+                        nn.GELU(), 
+                        nn.BatchNorm2d(dim)
+            ) for i in range(4)]) 
+
+    elif train_mode == 3:
+       return nn.Sequential(*[nn.Sequential(
+                    Residual(nn.Sequential(
+                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=4, groups=dim),
+                        nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=4, groups=dim),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim),
+                    )), 
+                        nn.Conv2d(dim, dim, kernel_size=1),
+                        nn.GELU(), 
+                        nn.BatchNorm2d(dim)
+            ) for i in range(4)]) 
+
+    elif train_mode == 4:
+         return nn.Sequential(*[nn.Sequential(
+                    Residual(nn.Sequential(
+                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=4, groups=dim),
+                        nn.GELU(),
                         nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=3, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
@@ -70,9 +112,9 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
                         nn.Conv2d(dim, dim, kernel_size=1),
                         nn.GELU(), 
                         nn.BatchNorm2d(dim)
-            ) for i in range(5)]) 
+            ) for i in range(4)]) 
 
-    elif train_mode == 2:
+    elif train_mode == 5:
        return nn.Sequential(*[nn.Sequential(
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=3, groups=dim),
@@ -84,56 +126,28 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
                         nn.Conv2d(dim, dim, kernel_size=1),
                         nn.GELU(), 
                         nn.BatchNorm2d(dim)
-            ) for i in range(5)]) 
-
-    elif train_mode == 3:
-         return nn.Sequential(*[nn.Sequential(
-                    Residual(nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=1, groups=dim),
-                        nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=1, groups=dim),
-                        nn.GELU(),
-                        nn.BatchNorm2d(dim),
-                    )), 
-                        nn.Conv2d(dim, dim, kernel_size=1),
-                        nn.GELU(), 
-                        nn.BatchNorm2d(dim)
-            ) for i in range(4)]) 
-
-    elif train_mode == 4:
-       return nn.Sequential(*[nn.Sequential(
-                    Residual(nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
-                        nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=1, groups=dim),
-                        nn.GELU(),
-                        nn.BatchNorm2d(dim),
-                    )), 
-                        nn.Conv2d(dim, dim, kernel_size=1),
-                        nn.GELU(), 
-                        nn.BatchNorm2d(dim)
-            ) for i in range(3)]) 
-
-    elif train_mode == 5:
-         return nn.Sequential(*[nn.Sequential(
-                    Residual(nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
-                        nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=7, padding='same', dilation=1, groups=dim),
-                        nn.GELU(),
-                        nn.BatchNorm2d(dim),
-                    )), 
-                        nn.Conv2d(dim, dim, kernel_size=1),
-                        nn.GELU(), 
-                        nn.BatchNorm2d(dim)
             ) for i in range(4)]) 
 
     elif train_mode == 6:
+         return nn.Sequential(*[nn.Sequential(
+                    Residual(nn.Sequential(
+                        nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
+                        nn.GELU(),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=1, groups=dim),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim),
+                    )), 
+                        nn.Conv2d(dim, dim, kernel_size=1),
+                        nn.GELU(), 
+                        nn.BatchNorm2d(dim)
+            ) for i in range(4)]) 
+
+    elif train_mode == 7:
        return nn.Sequential(*[nn.Sequential(
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=1, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 
@@ -142,12 +156,12 @@ def convmixer_layer(dim, depth, kernel_size, train_mode=0):
                         nn.BatchNorm2d(dim)
             ) for i in range(3)]) 
 
-    elif train_mode == 7:
+    elif train_mode == 8:
          return nn.Sequential(*[nn.Sequential(
                     Residual(nn.Sequential(
                         nn.Conv2d(dim, dim, kernel_size=9, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
-                        nn.Conv2d(dim, dim, kernel_size=5, padding='same', dilation=1, groups=dim),
+                        nn.Conv2d(dim, dim, kernel_size=3, padding='same', dilation=1, groups=dim),
                         nn.GELU(),
                         nn.BatchNorm2d(dim),
                     )), 

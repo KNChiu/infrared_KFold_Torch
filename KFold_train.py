@@ -60,7 +60,8 @@ def fit_model(model, train_loader, val_loader, classes):
     # optimizer = torch.optim.Adam(model.parameters(), lr = LR)
     optimizer = torch.optim.SGD(model.parameters(), lr = LR)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
-    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 2)
+    loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 1)
+    # loss_func = torch.nn.CrossEntropyLoss()
 
     cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
     # scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=0, cycle_mult=2.0, max_lr=LR, min_lr=0, warmup_steps=0, gamma=1.0)
@@ -248,23 +249,18 @@ def load_feature(dataloader, model):
     return feature, label, keyLabel
 
 def catboots_fit(train_data, train_label, val_data, val_label, iterations):
-    # cbc = cb.CatBoostClassifier(random_state=SEED, use_best_model=True, iterations=iterations, depth = CatBoost_depth,random_seed=SEED)
-    # cbc = cb.CatBoostClassifier(iterations=10000,learning_rate=0.1,max_depth=7,verbose=100,
-    #                                   early_stopping_rounds=500,task_type='GPU',eval_metric='AUC',random_seed=SEED)
-    
     cbc = cb.CatBoostClassifier(
                                loss_function='MultiClass',
                                 eval_metric='WKappa',
                                task_type="GPU",
-                            #    learning_rate=0.01,
+                               learning_rate=0.01,
                                iterations=iterations,
                                od_type="Iter",
-                                #depth=4,
-                               early_stopping_rounds=500,
-                                #l2_leaf_reg=10,
-                                #border_count=96,
+                                depth=6,
+                               early_stopping_rounds=100,
+                                # l2_leaf_reg=12,
+                                # border_count=96,
                                random_seed=42,
-                                # use_best_model=True
                                 use_best_model=True
                                 
                               )
@@ -321,20 +317,22 @@ if __name__ == '__main__':
 
 
     if train_mode == 0:
-        modelName = "(7d4G-5d3GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d4G-5d4GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 1:
-        modelName = "(5d1G-1d1GB)_1GB_X3_RB_paper_"
+        modelName = "(7d4G-5d3GB)_1GB_X4_CA_SA_RB_FL1.5_"
     elif train_mode == 2:
-        modelName = "(5d1G-3d1GB)_1GB_X4_RB_paper_"
+        modelName = "(7d3G-5d2GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 3:
-        modelName = "(5d1G-1d1GB)_1GB_X4_RB_paper_"
+        modelName = "(7d4G-3d4GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 4:
-        modelName = "(9d1G-7d1GB)_1GB_X3_CA_SA_RB_Test_"
+        modelName = "(7d4G-3d3GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 5:
-        modelName = "(9d1G-7d1GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d3G-3d2GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 6:
-        modelName = "(9d1G-5d1GB)_1GB_X3_CA_SA_RB_Test_"
+        modelName = "(9d1G-3d1GB)_1GB_X4_CA_SA_RB_Test_"
     elif train_mode == 7:
+        modelName = "(9d1G-5d1GB)_1GB_X3_CA_SA_RB_Test_"
+    elif train_mode == 8:
         modelName = "(9d1G-5d1GB)_1GB_X4_CA_SA_RB_Test_"
 
     CLASSNANE = ['Ischemia', 'Infect']
@@ -392,7 +390,7 @@ if __name__ == '__main__':
     elif ML_MODE == 'CatBoost':
         logger = get_logger(logPath + '//CNN_CatBoost.log', name=str(modelName))
 
-    logger.info("================================= CNN -> ML ============================================")
+    # logger.info("================================= CNN -> ML ============================================")
     # dataset = ImageFolder(DATAPATH, transform)          # 輸入數據集
     dataset  = Dataload
     kf = KFold(n_splits = KFOLD_N, shuffle = True)
@@ -401,6 +399,8 @@ if __name__ == '__main__':
     total_true = []
     total_pred = []
     total_pred_score = []
+    ML_ACC_list = []
+    ML_AUC_list = []
 
     ML_total_true = []
     ML_total_pred = []
@@ -500,13 +500,15 @@ if __name__ == '__main__':
             
             ML_roc_auc, compute_img = MyEstimator.compute_auc(feature_val_label, predict_Probability, CLASSNANE, logPath+"\\img", mode = 'ML_' + str(Kfold_cnt))
             ML_Accuracy, ML_Specificity, ML_Sensitivity, error_list, confusion_img = MyEstimator.confusion(feature_val_label, predict, ML_val_keyLabel, classes = CLASSNANE, logPath = logPath+"\\img", mode ='ML_' + str(Kfold_cnt))
-
+            
             if ML_roc_auc != -1:
                 ML_roc_auc = max(ML_roc_auc.values())
+            ML_ACC_list.append(round(ML_Accuracy, 2))
+            ML_AUC_list.append(round(ML_roc_auc, 2))
             
             logger.info("Kfold = [{}]\t".format(Kfold_cnt))
-            logger.info("Accuracy    : {:.2} => {:.2}\t  AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-            logger.info("Specificity : {:.2} => {:.2}\t  Sensitivity : {:.2} => {:.2}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
+            logger.info("ACC : {:.2f} => {:.2f}\t  AUC : {:.2f} => {:.2f}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+            logger.info("SPE : {:.2f} => {:.2f}\t  SEN : {:.2f} => {:.2f}".format(Specificity, ML_Specificity, Sensitivity, ML_Sensitivity))
             logger.info("-------------------------------------------------------------------------------------")
 
             if WANDBRUN:
@@ -565,9 +567,13 @@ if __name__ == '__main__':
         
         logger.info("=============================== KFlod Finish =====================================================")
         logger.info("Total Kfold = [{}]\t".format(KFOLD_N))
-        logger.info("Accuracy    : {:.2} => {:.2}\t  AUC         : {:.2} => {:.2}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
-        logger.info("Specificity : {:.2} => {:.2}\t  Sensitivity : {:.2} => {:.2}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
+        logger.info("ACC : {:.3f} => {:.3f}\t  AUC : {:.3f} => {:.3f}".format(Accuracy, ML_Accuracy, roc_auc, ML_roc_auc))
+        logger.info("SPE : {:.3f} => {:.3f}\t  SEN : {:.3f} => {:.3f}".format(Specificity.item(), ML_Specificity.item(), Sensitivity.item(), ML_Sensitivity.item()))
         logger.info("===================================================================================================")
+        logger.info("ML_ACC_list :")
+        logger.info(ML_ACC_list)
+        logger.info("ML_AUC_list :")
+        logger.info(ML_AUC_list)
         logger.info("KFlod time : " + str(time.time() - start) + " s")
         logger.info("True : 1 but 0 :")
         logger.info(error_list['1_to_0'])
