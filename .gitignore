@@ -6,3 +6,4 @@
 *.ckpt
 *.onnx
 *.pth
+*.csv
