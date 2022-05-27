@@ -56,11 +56,36 @@ if SEED:
     torch.backends.cudnn.deterministic = True
 
 
+import torch.nn.functional as F 
+
+def linear_combination(x, y, epsilon):  
+    return epsilon*x + (1-epsilon)*y
+ 
+def reduce_loss(loss, reduction='mean'): 
+    return loss.mean() if reduction=='mean' else loss.sum() if reduction=='sum' else loss 
+ 
+class LabelSmoothingCrossEntropy(torch.nn.Module): 
+    def __init__(self, epsilon:float=0.1, reduction='mean'): 
+        super().__init__() 
+        self.epsilon = epsilon 
+        self.reduction = reduction 
+ 
+    def forward(self, preds, target): 
+        n = preds.size()[-1] 
+        log_preds = F.log_softmax(preds, dim=-1) 
+        loss = reduce_loss(-log_preds.sum(dim=-1), self.reduction) 
+        nll = F.nll_loss(log_preds, target, reduction=self.reduction) 
+        return linear_combination(loss/n, nll, self.epsilon)
+
+
 def fit_model(model, train_loader, val_loader, classes):
     # optimizer = torch.optim.Adam(model.parameters(), lr = LR)
-    optimizer = torch.optim.SGD(model.parameters(), lr = LR)
+    optimizer = torch.optim.SGD(model.parameters(), lr = LR, weight_decay=1e-4)
     # loss_func = FocalLoss(class_num=3, alpha = torch.tensor([0.36, 0.56, 0.72]).to(device), gamma = 4)
+    # loss_func = FocalLoss(class_num=len(classes), alpha = torch.tensor([0.44, 0.56]).to(device), gamma = 2)
     loss_func = FocalLoss(class_num=len(classes), alpha = None, gamma = 1)
+    # loss_func = LabelSmoothingCrossEntropy() 
+
     # loss_func = torch.nn.CrossEntropyLoss()
 
     cos_restart_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=2)    # (1 + T_mult + T_mult**2) * T_0 // 5,15,35,75,155
@@ -317,23 +342,22 @@ if __name__ == '__main__':
 
 
     if train_mode == 0:
-        modelName = "(7d4G-5d4GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d4G-5d4GB)_1GB_X4_viajet2_LabelSmooth_wd1e-4"
     elif train_mode == 1:
-        modelName = "(7d4G-5d3GB)_1GB_X4_CA_SA_RB_FL1.5_"
+        modelName = "(7d4G-5d3GB)_1GB_X4_0527_104_FL1_wd1e-4"
     elif train_mode == 2:
-        modelName = "(7d3G-5d2GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d3G-5d2GB)_1GB_X4_viajet2_LabelSmooth_wd1e-4"
     elif train_mode == 3:
-        modelName = "(7d4G-3d4GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d4G-3d4GB)_1GB_X4_viajet2_LabelSmooth_wd1e-4"
     elif train_mode == 4:
-        modelName = "(7d4G-3d3GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d4G-3d3GB)_1GB_X4_viajet2_LabelSmooth_wd1e-4"
     elif train_mode == 5:
-        modelName = "(7d3G-3d2GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(7d3G-3d2GB)_1GB_X4_viajet2_LabelSmooth_wd1e-4"
     elif train_mode == 6:
-        modelName = "(9d1G-3d1GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(9d4G-5d3GB)_1GB_X4_viajet2_LabelSmooth_wd1e-4"
     elif train_mode == 7:
-        modelName = "(9d1G-5d1GB)_1GB_X3_CA_SA_RB_Test_"
-    elif train_mode == 8:
-        modelName = "(9d1G-5d1GB)_1GB_X4_CA_SA_RB_Test_"
+        modelName = "(9d5G-5d4GB)_1GB_X4_dviajet2_LabelSmooth_wd1e-4"
+
 
     CLASSNANE = ['Ischemia', 'Infect']
 
@@ -413,7 +437,7 @@ if __name__ == '__main__':
         Kfold_cnt += 1
 
         if WANDBRUN:
-            wb_run = wandb.init(project='infraredThermal_kfold', reinit=True, group="ForTest", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
+            wb_run = wandb.init(project='infraredThermal_kfold', reinit=True, group="newdata", name=str(str(modelName)+"_K="+str(Kfold_cnt)), dir = WANDBDIR)
         
         if SAVEIDX:
             with open(logPath + '//'+ 'kfold_idx.json','a+',encoding="utf-8") as json_file:
